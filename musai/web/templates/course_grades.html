@@ -1,0 +1,124 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'grades' %}
+{% set tab_title = 'Grades' %}
+{% block feature %}grades{% endblock %}
+
+{% block course_content %}
+
+<div class="mb-5">
+  <h2 class="font-serif text-2xl font-semibold text-ink">Grades</h2>
+  <p class="text-sm text-muted mt-1 max-w-2xl leading-relaxed">
+    One sheet per partial: the exact computed grade, any curve or extra credit on top of it,
+    and the SEGA dry run. MUSAI only ever clicks <em>Guardar</em> in SEGA — confirming a grade
+    stays a human decision.
+  </p>
+</div>
+
+{% if not partials %}
+<div class="card p-8 text-center">
+  <p class="font-serif text-xl font-semibold text-ink">This course has no partials</p>
+  <p class="text-sm text-muted mt-2 max-w-lg mx-auto leading-relaxed">
+    A partial is what a grade is computed into — its name, its SEGA evaluation and the weights
+    of general / special / exam work. The scheme is read from each course rather than assumed,
+    so a course that has none has no grading scheme yet.
+  </p>
+</div>
+
+{% else %}
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="border-b border-line text-muted text-left">
+      <tr>
+        <th class="px-5 py-3 font-semibold">Partial</th>
+        <th class="px-5 py-3 font-semibold">SEGA evaluation</th>
+        <th class="px-5 py-3 font-semibold text-right">Activities</th>
+        <th class="px-5 py-3 font-semibold text-right">Computed</th>
+        <th class="px-5 py-3 font-semibold text-right">Saved to SEGA</th>
+        <th class="px-5 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {% for row in rows %}
+      <tr class="hover:bg-paper/60">
+        <td class="px-5 py-3 font-semibold text-ink">{{ row.partial.name }}</td>
+        <td class="px-5 py-3 val text-muted">{{ row.partial.sega_evaluacion }}</td>
+        <td class="px-5 py-3 text-right {% if not row.n_activities %}text-muted{% endif %}">
+          {{ row.n_activities }}
+        </td>
+        <td class="px-5 py-3 text-right">{{ row.n_computed }}</td>
+        <td class="px-5 py-3 text-right">
+          {% if row.n_uploaded %}<span class="chip">{{ row.n_uploaded }}</span>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td class="px-5 py-3 text-right">
+          {% if row.n_activities %}
+          <a href="/courses/{{ course.id }}/partial/{{ row.partial.id }}"
+             class="btn btn-ghost">Open sheet</a>
+          {% else %}
+          {# Not disabled-and-silent: the reason is one hop away and worth saying. #}
+          <a href="/courses/{{ course.id }}/activities" class="text-xs text-muted hover:text-ink">
+            no activities assigned →
+          </a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endif %}
+
+{#
+  The gradebook card. 🔴 It sits on this tab and not behind a "Participants" tab because MUSAI
+  has no roster separate from the gradebook: students, activities and grades all arrive in ONE
+  export file, so one action refreshes all three. A Participants tab would advertise a roster
+  MUSAI does not own — and invite somebody to build an enrolment writer, which it must never have.
+
+  The old line here was "{{ students }} students enrolled in MUSAI for this course." — a bare
+  count with no date, which is what let 1-LED-A read 10 while the live course held 30-something.
+#}
+<div class="card p-5 mt-5">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h3 class="font-semibold text-ink">Gradebook</h3>
+      <p class="text-sm text-muted mt-1 leading-relaxed max-w-xl">
+        {#
+          🔴 Three states. The draft had two and printed a falsehood: every course that predates
+          this column has enrolments but no timestamp, so 1-LED-A would have read "Never imported"
+          directly above a table listing ten students. Undated is UNKNOWN, not never.
+        #}
+        {% if gradebook_state == 'dated' %}
+        <strong class="text-ink">{{ students }}</strong>
+        student{{ '' if students == 1 else 's' }}, from the gradebook imported
+        <strong class="text-ink">{{ gradebook_ingested_label }}</strong>
+        {% if gradebook_stale %}
+        <span class="chip" style="background:var(--danger-tint);color:#7F1D1D">
+          {{ gradebook_age_days }} days old
+        </span>
+        {% endif %}
+        {% elif gradebook_state == 'undated' %}
+        <strong class="text-ink">{{ students }}</strong>
+        student{{ '' if students == 1 else 's' }} — but MUSAI does not know when that was
+        imported, because it happened before it started recording the date.
+        <strong class="text-ink">Refresh to find out whether it is current.</strong>
+        {% else %}
+        <strong class="text-ink">Never imported.</strong>
+        MUSAI does not know who is enrolled in this course yet.
+        {% endif %}
+      </p>
+      <p class="text-xs text-muted mt-2 leading-relaxed max-w-xl">
+        This count comes from the last gradebook export, not from the course's participants list
+        — so students who enrolled afterwards are not in it. Refreshing reads Moodle and changes
+        nothing in the course.
+      </p>
+    </div>
+    <button class="btn btn-accent flex-none"
+            hx-post="/courses/{{ course.id }}/gradebook/refresh"
+            hx-target="#gradebook-work" hx-swap="innerHTML">
+      Refresh from Moodle
+    </button>
+  </div>
+  <div id="gradebook-work"></div>
+</div>
+{% endblock %}

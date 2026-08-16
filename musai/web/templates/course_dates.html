@@ -1,0 +1,62 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'dates' %}
+{% set tab_title = 'Cronograma' %}
+{% block feature %}dates{% endblock %}
+
+{% block course_content %}
+<h2 class="font-serif text-2xl font-semibold text-ink">Cronograma</h2>
+<p class="text-sm text-muted mt-1 mb-6 max-w-2xl leading-relaxed">
+  Cuándo abre y cierra cada actividad. Se organiza por <strong>pestaña</strong>, y se escribe
+  actividad por actividad — cada tipo tiene sus propios campos de fecha.
+</p>
+
+<div class="card p-5 mb-5">
+  <form hx-post="/courses/{{ course.id }}/cronograma/settings"
+        hx-target="#plan" hx-swap="outerHTML" class="grid gap-4"
+        style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+    <label class="text-xs">
+      <span class="block mb-1 font-semibold text-ink">Primer día de clases</span>
+      <input type="date" name="starts" value="{{ data.starts }}"
+             class="w-full rounded border-line px-2 py-1.5 text-sm">
+    </label>
+    <label class="text-xs">
+      <span class="block mb-1 font-semibold text-ink">Último día de clases</span>
+      <input type="date" name="ends" value="{{ data.ends }}"
+             class="w-full rounded border-line px-2 py-1.5 text-sm">
+    </label>
+    <label class="text-xs">
+      <span class="block mb-1 font-semibold text-ink">Parciales</span>
+      <input type="number" name="periods" min="1" max="6" value="{{ data.periods }}"
+             class="w-full rounded border-line px-2 py-1.5 text-sm">
+    </label>
+    <label class="text-xs">
+      <span class="block mb-1 font-semibold text-ink">Ventana de examen (días)</span>
+      <input type="number" name="exam_days" min="1" max="30" value="{{ data.exam_days }}"
+             class="w-full rounded border-line px-2 py-1.5 text-sm">
+    </label>
+    <div class="flex items-end gap-3">
+      <button class="btn btn-accent">Recalcular</button>
+    </div>
+    <label class="flex items-center gap-2 text-xs cursor-pointer col-span-full"
+           title="Sin esto, una tarea entregada tarde se marca como tarde pero SÍ se recibe">
+      <input type="checkbox" name="cutoff" value="1" class="rounded border-line"
+             {% if data.cutoff %}checked{% endif %}>
+      <span>Cerrar <strong>en firme</strong> las tareas al terminar el parcial
+            (por omisión se reciben tarde y marcadas)</span>
+    </label>
+  </form>
+
+  {% if data.suggested %}
+  <p class="text-xs text-muted mt-3">
+    ⚠ Fechas sugeridas: el inicio del semestre {{ semester.name if semester }} y
+    <strong>15 semanas</strong>. El semestre cierra administrativamente el
+    {{ semester.ends_on if semester }}, que casi nunca es el último día de clases —
+    ajústalo antes de aplicar.
+  </p>
+  {% endif %}
+</div>
+
+{% include "course_dates_plan.html" %}
+
+<div id="run-result" class="mt-5"></div>
+{% endblock %}

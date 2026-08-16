@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% set nav_section = 'settings' %}
+{% block title %}MUSAI — Settings{% endblock %}
+
+{% block content %}
+<div class="mb-7">
+  <h1 class="font-serif text-3xl font-semibold text-ink">Settings</h1>
+  <p class="text-muted mt-1 text-sm">Signed in as {{ professor.email }}</p>
+</div>
+
+<div class="flex gap-1 mb-6 border-b border-line">
+  <span class="px-4 py-2 text-sm font-semibold text-ink border-b-2" style="border-color:#4F46E5">
+    Passwords
+  </span>
+</div>
+
+{% if notice %}
+<div class="card p-4 mb-5 text-sm border-l-4" style="border-left-color:#14B8A6">{{ notice }}</div>
+{% endif %}
+{% if error %}
+<div class="card p-4 mb-5 text-sm border-l-4 whitespace-pre-line"
+     style="border-left-color:#F43F5E">{{ error }}</div>
+{% endif %}
+
+{# 🔴 The honest framing, first thing on the page. MUSAI must be able to REPLAY these
+   passwords into a login form, so it can necessarily read them. A page that implied a hash
+   would be lying, and a professor deciding whether to store a password deserves the real
+   sentence. #}
+<div class="card p-5 mb-6">
+  <h2 class="text-sm font-semibold text-ink mb-2">What MUSAI does with these</h2>
+  <p class="text-sm text-muted leading-relaxed">
+    Moodle has no way to grant an app access on your behalf — no API key, no app password. So
+    to read your course list, make a backup or run a restore <em>as you</em>, MUSAI signs in
+    with your password the same way you do.
+  </p>
+  <p class="text-sm text-muted leading-relaxed mt-2">
+    That means <strong>MUSAI can read these passwords</strong>, and it is worth knowing that
+    before you store one. They are encrypted with a key that lives outside the database, they
+    are never shown back to you or written to any log, and
+    <strong>Delete removes them for good</strong>. Storing them is optional — you can type one
+    in each time instead, and nothing is kept.
+  </p>
+</div>
+
+{% if not vault_ready %}
+<div class="card p-5 mb-6 border-l-4" style="border-left-color:#F59E0B">
+  <h2 class="text-sm font-semibold text-ink mb-1">Password storage is not set up on this server</h2>
+  <p class="text-sm text-muted">
+    <code class="bg-paper px-1.5 py-0.5 rounded border border-line">CREDENTIAL_KEY</code>
+    is missing from <code class="bg-paper px-1.5 py-0.5 rounded border border-line">.env</code>,
+    so nothing can be encrypted — and MUSAI will not store a password in the clear instead.
+    Generate one:
+  </p>
+  <pre class="text-xs bg-paper border border-line rounded-lg p-3 mt-2 overflow-x-auto"
+>python -c "from musai.security.vault import generate_key; print(generate_key())"</pre>
+  <p class="text-xs text-muted mt-2">
+    Put it in <code>.env</code> and restart fully — <code>--reload</code> does not reread it.
+  </p>
+</div>
+{% endif %}
+
+<div class="space-y-5">
+  {% for system in systems %}
+  {% set c = credentials[system] %}
+  <div class="card overflow-hidden">
+    <div class="px-5 py-4 border-b border-line flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h2 class="text-sm font-semibold text-ink">{{ c.label }}</h2>
+        <p class="text-xs text-muted mt-0.5">{{ c.why }}</p>
+      </div>
+      {% if c.stored %}
+      <span class="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap"
+            style="background:{% if c.last_ok_at %}#E0F5F1;color:#0F766E{% else %}#FBF1E1;color:#78350F{% endif %}">
+        {% if c.last_ok_at %}Stored · works{% else %}Stored · not tested yet{% endif %}
+      </span>
+      {% else %}
+      <span class="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap"
+            style="background:#F1F5F9;color:#64748B">Not stored</span>
+      {% endif %}
+    </div>
+
+    <div class="px-5 py-4">
+      {% if c.stored %}
+      <p class="text-xs text-muted mb-4">
+        Username <span class="font-mono text-ink">{{ c.username }}</span> ·
+        saved {{ c.updated_at.strftime('%d %b %H:%M') if c.updated_at else '—' }}
+        {%- if c.last_ok_at %} · last worked {{ c.last_ok_at.strftime('%d %b %H:%M') }}{% endif %}
+      </p>
+      {% endif %}
+
+      <form method="post" action="/settings/passwords/{{ system }}"
+            class="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <label class="block">
+          <span class="text-xs text-muted block mb-1">Username</span>
+          <input type="text" name="username" autocomplete="off" required
+                 value="{{ c.username or (username_guess if system == 'moodle' else '') }}"
+                 class="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm font-mono text-ink" />
+        </label>
+        <label class="block">
+          <span class="text-xs text-muted block mb-1">
+            {% if c.stored %}New password (replaces the stored one){% else %}Password{% endif %}
+          </span>
+          {# Write-only. There is no route that returns a stored secret, so this never renders
+             a value — not even a masked one, which would only imply one could be fetched. #}
+          <input type="password" name="password" required autocomplete="new-password"
+                 placeholder="••••••••"
+                 class="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink" />
+        </label>
+        <button type="submit" class="btn btn-clay h-[38px]"
+                {% if not vault_ready %}disabled style="opacity:.5;cursor:not-allowed"{% endif %}>
+          {% if c.stored %}Replace{% else %}Save{% endif %}
+        </button>
+      </form>
+
+      {% if system == 'moodle' %}
+      <p class="text-[11px] text-muted mt-2">
+        Your Moodle username is usually the part of your UACH email before the @ —
+        <span class="font-mono">{{ username_guess }}</span> for you. Change it if yours differs.
+      </p>
+      {% endif %}
+
+      {% if c.stored %}
+      <div class="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-line">
+        {% if system == 'moodle' %}
+        <button class="btn btn-ghost" hx-post="/settings/passwords/{{ system }}/test"
+                hx-target="#test-{{ system }}" hx-swap="innerHTML">
+          Test this password
+        </button>
+        {% endif %}
+        <form method="post" action="/settings/passwords/{{ system }}/delete"
+              onsubmit="return confirm('Delete the stored {{ c.label }} password? MUSAI will not be able to act on your behalf until you enter it again.')">
+          <button type="submit" class="btn btn-ghost" style="color:#B91C1C">Delete</button>
+        </form>
+      </div>
+      <div id="test-{{ system }}" class="mt-4"></div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<p class="text-xs text-muted mt-6 leading-relaxed">
+  MUSAI signs in to Moodle only as you, and only for your own courses. Every backup and restore
+  is recorded against <span class="font-mono">{{ professor.email }}</span>.
+</p>
+{% endblock %}

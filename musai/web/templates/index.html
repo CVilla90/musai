@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}MUSAI — Cockpit{% endblock %}
+
+{% block content %}
+<div class="mb-7 flex items-start justify-between gap-4 flex-wrap">
+  <div>
+    <h1 class="font-serif text-3xl font-semibold text-ink">Cockpit</h1>
+    <p class="text-muted mt-1 text-sm">
+      {% if courses %}
+      Your {{ courses|length }} course{{ '' if courses|length == 1 else 's' }} in
+      {{ semester_label }}.
+      {% else %}
+      {{ semester_label }}
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="flex items-center gap-3 flex-wrap">
+    {% if semesters|length > 1 %}
+    <div class="flex items-center gap-2 text-sm">
+      <span class="text-muted text-xs">Semester</span>
+      <select onchange="location.href='/?semester='+encodeURIComponent(this.value)"
+              class="rounded-lg border border-line bg-white px-3 py-1.5 text-sm text-ink">
+        {% for s in semesters %}
+        <option value="{{ s.name }}" {% if semester and s.id == semester.id %}selected{% endif %}>
+          {{ s.name }}
+        </option>
+        {% endfor %}
+      </select>
+      {% if not is_current %}
+      <span class="text-[11px] px-2 py-0.5 rounded-full text-clay-700" style="background:#FBF1E1">past</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if courses and is_current %}
+    {# Re-mapping is always available: a course added late, a group renamed, a shell that only
+       appeared this week. It is additive — nothing is ever removed by a re-map. #}
+    <button class="btn btn-ghost" hx-post="/courses/map" hx-target="#map-work" hx-swap="innerHTML">
+      Update from Moodle
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<div id="map-work" class="mb-6"></div>
+
+{% if courses %}
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="border-b border-line text-muted">
+      <tr class="text-left">
+        <th class="px-5 py-3 font-semibold">Group</th>
+        <th class="px-5 py-3 font-semibold">Subject</th>
+        <th class="px-5 py-3 font-semibold">Moodle</th>
+        <th class="px-5 py-3 font-semibold text-right"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {% for course in courses %}
+      <tr class="hover:bg-paper/60">
+        <td class="px-5 py-3 font-mono font-semibold text-clay-700">{{ course.group_code }}</td>
+        <td class="px-5 py-3 text-ink">
+          {{ course.subject }}
+          {% if course.cycle %}
+          <span class="block text-[11px] text-muted">{{ course.cycle }}</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 font-mono text-xs text-muted">{{ course.moodle_course_id or '—' }}</td>
+        <td class="px-5 py-3 text-right whitespace-nowrap">
+          <a href="/courses/{{ course.id }}/transfer"
+             class="text-xs font-semibold mr-4 hover:underline"
+             style="color:#9C5730">Backup &amp; restore</a>
+          <a href="/courses/{{ course.id }}"
+             class="text-xs font-semibold hover:underline"
+             style="color:var(--accent-deep)">Open →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% elif not is_current %}
+{# A past semester with nothing in it is a fact, not a call to action — offering to map an
+   old semester from today's dashboard would create this semester's courses under last
+   semester's name. #}
+<div class="card p-10 text-center">
+  <p class="text-lg font-medium text-ink">No courses in {{ semester_label }}.</p>
+  <p class="text-sm text-muted mt-1">
+    MUSAI can only read the courses on your Moodle dashboard today, which is this semester's.
+  </p>
+  <a href="/" class="btn btn-clay mt-5">Back to {{ semesters[0].name if semesters else 'now' }}</a>
+</div>
+
+{% else %}
+{# ── The first screen a new professor ever sees. ──────────────────────────────
+   Three states, and the difference between them is whether MUSAI *can* do the thing it is
+   offering. Offering a button that is going to fail is worse than explaining the setup. #}
+<div class="card p-10 max-w-2xl mx-auto text-center">
+  <p class="font-serif text-2xl font-semibold text-ink">
+    No courses loaded for {{ semester_label }} yet
+  </p>
+
+  {% if not vault_ready %}
+  <p class="text-sm text-muted mt-3 leading-relaxed">
+    MUSAI can read your courses straight from Moodle, but password storage is not set up on
+    this server yet, so it cannot sign in as you. That is a one-line fix in
+    <code class="bg-paper px-1.5 py-0.5 rounded border border-line">.env</code> —
+    <a href="/settings" class="font-semibold" style="color:#4F46E5">Settings</a> explains it.
+  </p>
+
+  {% elif not moodle_stored %}
+  <p class="text-sm text-muted mt-3 leading-relaxed">
+    MUSAI reads your course list from
+    <span class="font-mono">campusvirtual.uach.mx</span> — the same dashboard you see when you
+    sign in to Moodle. To do that it needs your Moodle password, because Moodle has no other
+    way to let an app act for you.
+  </p>
+  <a href="/settings" class="btn btn-clay mt-5">Add my Moodle password</a>
+  <p class="text-[11px] text-muted mt-3">
+    You choose whether it is stored. Nothing is written to any of your courses by reading them.
+  </p>
+
+  {% else %}
+  <p class="text-sm text-muted mt-3 leading-relaxed">
+    Load them from your Moodle dashboard. MUSAI signs in as
+    <span class="font-mono">{{ professor.email.split('@')[0] }}</span>, reads the courses listed
+    there, and creates them here. It reads only — nothing is written to any course.
+  </p>
+  <button class="btn btn-clay mt-5" hx-post="/courses/map"
+          hx-target="#map-work" hx-swap="innerHTML"
+          hx-on::after-request="window.scrollTo({top:0,behavior:'smooth'})">
+    Load my courses from Moodle
+  </button>
+  <p class="text-[11px] text-muted mt-3">Takes about half a minute.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

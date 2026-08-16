@@ -1,0 +1,72 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'grades' %}
+{% set tab_title = 'SEGA dry-run' %}
+{% block feature %}grades{% endblock %}
+
+{% block course_content %}
+<div class="mb-5 flex items-center gap-3 flex-wrap">
+  <a href="/courses/{{ course.id }}/partial/{{ partial.id }}" class="text-muted hover:text-ink text-sm">← {{ partial.name }}</a>
+  <h2 class="font-serif text-2xl font-semibold text-ink">SEGA dry-run</h2>
+  <span class="text-muted text-sm">{{ partial.sega_evaluacion }}</span>
+</div>
+
+<div class="card p-4 mb-5 text-sm" style="background:#FBF1E1;color:#B45309">
+  <strong>Dry-run only.</strong> Nothing is written to SEGA. The adapter clicks
+  <em>Guardar</em> only — never <em>Confirmar</em>. Run the live read-only diff with
+  <code class="bg-white/60 px-1 rounded">python -m musai.automation.sega --group {{ course.group_code }} --partial "{{ partial.name }}"</code>.
+</div>
+
+{% if results %}
+<div class="card overflow-hidden mb-4">
+  <table class="w-full text-sm">
+    <thead class="border-b border-line text-muted">
+      <tr class="text-left">
+        <th class="px-4 py-2.5 font-semibold">#</th>
+        <th class="px-4 py-2.5 font-semibold">Matrícula</th>
+        <th class="px-4 py-2.5 font-semibold">Student</th>
+        <th class="px-3 py-2.5 font-semibold text-right">Exact</th>
+        <th class="px-3 py-2.5 font-semibold text-right">Uploads</th>
+        <th class="px-3 py-2.5 font-semibold">Curve</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {% for r in results %}
+      <tr class="hover:bg-paper/60">
+        <td class="px-4 py-2 text-muted text-xs">{{ loop.index }}</td>
+        <td class="px-4 py-2 font-mono text-muted text-xs">{{ r.matricula }}</td>
+        <td class="px-4 py-2 text-ink">{{ r.name }}</td>
+        <td class="px-3 py-2 text-right font-mono text-muted">{{ "%.1f"|format(r.computed) }}</td>
+        <td class="px-3 py-2 text-right">
+          <span class="grade-pill" style="{{ grade_pill_style(r.grade_10) }}">{{ "%.1f"|format(r.grade_10) }}</span>
+        </td>
+        <td class="px-3 py-2">
+          {% if r.curve_mode == "auto" %}
+            <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:#E0F5F1;color:#0F766E" title="{{ r.curve_note }}">✦ auto</span>
+          {% elif r.curve_mode == "manual" %}
+            <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:#FBF1E1;color:#B45309" title="{{ r.curve_note }}">✎ {{ r.curve_note }}</span>
+          {% else %}<span class="text-muted text-xs">—</span>{% endif %}
+          {% if r.extra %}<span class="text-[11px] ml-1" style="color:#B45309" title="{{ r.extra_note }}">+{{ "%.1f"|format(r.extra) }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="border-t border-line">
+      <tr>
+        <td colspan="4" class="px-4 py-2 text-xs text-muted font-semibold">{{ results | length }} students · uploads the <em>curved</em> value</td>
+        <td class="px-3 py-2 text-right text-xs text-muted font-mono">
+          avg {{ "%.1f"|format(results | map(attribute='grade_10') | list | sum / results | length) }}
+        </td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<p class="text-xs text-muted">
+  SEGA receives <strong class="text-ink">Evaluación = {{ partial.sega_evaluacion }}</strong>{% if partial.sega_date %} · Fecha = {{ partial.sega_date }}{% endif %}.
+  The "Uploads" column is the curved/overridden grade; "Exact" is the untouched machine grade.
+</p>
+{% else %}
+<div class="card p-8 text-center text-muted text-sm">No partial grades computed yet. Click "Recompute" first.</div>
+{% endif %}
+{% endblock %}

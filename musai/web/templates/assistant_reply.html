@@ -1,0 +1,26 @@
+<div class="flex justify-end">
+  <div class="max-w-[80%] rounded-2xl rounded-br-sm px-3.5 py-2 text-sm" style="background:#4F46E5;color:#fff">
+    {{ q }}
+  </div>
+</div>
+<div class="flex justify-start">
+  <div class="max-w-[85%] rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm bg-white border border-line">
+    <div class="whitespace-pre-wrap leading-relaxed text-ink">{{ result.answer }}</div>
+    {% if result.tools or result.usage %}
+    <div class="mt-2 pt-2 border-t border-line flex flex-wrap items-center gap-1.5">
+      {% for t in result.tools %}
+      <span class="text-[10px] font-mono px-1.5 py-0.5 rounded" style="background:#E0F5F1;color:#0F766E">⚙ {{ t }}</span>
+      {% endfor %}
+      {% if result.usage %}
+      {% set u = result.usage %}
+      <span class="text-[10px] font-mono px-1.5 py-0.5 rounded ml-auto"
+            style="background:{% if u.tokens_pct >= 80 %}#FEE2E2;color:#B91C1C{% else %}#F1F5F9;color:#64748B{% endif %}"
+            title="Today: {{ u.requests }}/{{ u.requests_cap }} requests, {{ u.tokens }}/{{ u.tokens_cap }} tokens">
+        {{ u.tokens }} tok · {{ u.tokens_pct }}% of today
+        {%- if u.estimated_usd is not none %} · ~${{ '%.4f'|format(u.estimated_usd) }}{% endif %}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>

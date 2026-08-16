@@ -1,0 +1,163 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'grades' %}
+{% set tab_title = partial.name %}
+{% block feature %}grades{% endblock %}
+
+{% macro pct(v) %}{% if v is not none %}{{ "%.0f"|format(v) }}{% else %}–{% endif %}{% endmacro %}
+
+{% block course_content %}
+<div class="mb-5 flex items-center gap-3 flex-wrap">
+  <a href="/courses/{{ course.id }}/grades" class="text-muted hover:text-ink text-sm">← Grades</a>
+  <h2 class="font-serif text-2xl font-semibold text-ink">{{ partial.name }}</h2>
+  <span class="text-muted text-sm">{{ partial.sega_evaluacion }}</span>
+  <span class="ml-auto text-xs text-muted">{{ mapped_count }} activities mapped</span>
+</div>
+
+<!-- stat strip -->
+<div class="flex flex-wrap gap-2 mb-5 text-xs">
+  <span class="card px-3 py-1.5 text-muted">{{ n_graded }} graded</span>
+  <span class="card px-3 py-1.5 text-muted">{{ n_pass }} passing <span class="text-muted/60">(≥7.0)</span></span>
+  {% if n_curved %}
+  <span class="card px-3 py-1.5" style="color:#0F766E">{{ n_auto }} auto-curved · {{ n_manual }} manual</span>
+  {% else %}
+  <span class="card px-3 py-1.5 text-muted">no curve applied</span>
+  {% endif %}
+  {% if n_extra %}<span class="card px-3 py-1.5" style="color:#B45309">{{ n_extra }} with extra credit</span>{% endif %}
+</div>
+
+<!-- curve + actions -->
+<div class="card p-4 mb-6">
+  <div class="flex items-center gap-2 flex-wrap">
+    <form method="post" action="/courses/{{ course.id }}/partial/{{ partial.id }}/compute"
+          data-loading="Recomputing grades…"
+          data-steps="reading mapped activities|averaging general (60%)|special 20% · exam 20%|converting to 0–10">
+      <button class="btn btn-ghost">↻ Recompute exact</button>
+    </form>
+    <span class="w-px h-6 bg-line mx-1"></span>
+    <form method="post" action="/courses/{{ course.id }}/partial/{{ partial.id }}/curve/auto"
+          data-loading="Applying {{ curve_label }}…"
+          data-steps="reading exact grades|grade' = √(grade/10)×10|preserving manual overrides|writing finals + audit">
+      <button class="btn btn-clay">✦ Apply {{ curve_label }}</button>
+    </form>
+    {% if n_curved %}
+    <form method="post" action="/courses/{{ course.id }}/partial/{{ partial.id }}/curve/clear"
+          data-loading="Clearing curves…" data-steps="reverting every row to the exact grade">
+      <button class="btn btn-ghost">↺ Clear all</button>
+    </form>
+    {% endif %}
+    <a href="/courses/{{ course.id }}/partial/{{ partial.id }}/dryrun" class="btn btn-ghost ml-auto">SEGA dry-run →</a>
+  </div>
+  <p class="text-xs text-muted mt-3 leading-relaxed">
+    The <strong class="text-ink">exact</strong> grade is computed from the data and never changed.
+    A curve is an explicit, audited adjustment applied <em>on top</em> — the standard is
+    <strong class="text-ink">{{ curve_label }}</strong> (helps the weakest most, leaves the top untouched).
+    You can override any student individually.
+  </p>
+</div>
+
+{% if rows %}
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="border-b border-line text-muted">
+      <tr class="text-left">
+        <th class="px-4 py-2.5 font-semibold">Student</th>
+        <th class="px-4 py-2.5 font-semibold">Matrícula</th>
+        <th class="px-3 py-2.5 font-semibold text-center hidden md:table-cell">G·S·E</th>
+        <th class="px-3 py-2.5 font-semibold text-right">Exact</th>
+        <th class="px-3 py-2.5 font-semibold">Curve</th>
+        <th class="px-3 py-2.5 font-semibold text-right">Extra</th>
+        <th class="px-3 py-2.5 font-semibold text-right">Final</th>
+        <th class="px-3 py-2.5 font-semibold text-right"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {% for row in rows %}
+      {% set ex = row.grade_10 %}
+      {% set base = row.curve_base %}
+      {% set xtra = row.extra %}
+      {% set fin = row.final_10 %}
+      <tr class="hover:bg-paper/60">
+        <td class="px-4 py-2 text-ink">{{ row.student.full_name }}</td>
+        <td class="px-4 py-2 font-mono text-muted text-xs">{{ row.student.matricula }}</td>
+        <td class="px-3 py-2 text-center text-[11px] text-muted font-mono hidden md:table-cell">
+          {{ pct(row.components.general_avg) }}·{{ pct(row.components.special) }}·{{ pct(row.components.exam) }}
+        </td>
+        <td class="px-3 py-2 text-right font-mono text-muted">
+          {% if ex is not none %}{{ "%.1f"|format(ex) }}{% else %}—{% endif %}
+        </td>
+        <td class="px-3 py-2">
+          {% if row.curve_mode == "auto" %}
+            <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:#E0F5F1;color:#0F766E" title="{{ row.curve_note }}">✦ auto</span>
+          {% elif row.curve_mode == "manual" %}
+            <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:#FBF1E1;color:#B45309" title="{{ row.curve_note }}">✎ manual</span>
+          {% else %}<span class="text-muted text-xs">—</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 text-right font-mono text-xs">
+          {% if xtra %}<span style="color:#B45309" title="{{ row.extra_note }}">+{{ "%.1f"|format(xtra) }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 text-right">
+          {% if fin is not none %}
+            <span class="grade-pill" style="{{ grade_pill_style(fin) }}">{{ "%.1f"|format(fin) }}</span>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 text-right">
+          <details class="inline-block text-left">
+            <summary class="cursor-pointer text-xs text-muted hover:text-clay list-none select-none">adjust</summary>
+            <div class="card p-3 mt-2 absolute right-4 z-10 w-64 shadow-soft space-y-3 text-left">
+              <!-- manual override of the grade -->
+              <form method="post" action="/courses/{{ course.id }}/partial/{{ partial.id }}/override" class="space-y-2">
+                <input type="hidden" name="student_id" value="{{ row.student.id }}">
+                <div class="text-[11px] font-semibold text-muted uppercase tracking-wide">Override grade</div>
+                <div class="flex items-center gap-2">
+                  <input name="final" type="number" step="0.1" min="0" max="10"
+                         value="{% if base is not none %}{{ '%.1f'|format(base) }}{% endif %}"
+                         class="w-16 text-sm border border-line rounded-md px-2 py-1 font-mono">
+                  <span class="text-xs text-muted">/ 10</span>
+                </div>
+                <input name="reason" type="text" placeholder="reason"
+                       value="{% if row.curve_mode == 'manual' %}{{ row.curve_note }}{% endif %}"
+                       class="w-full text-xs border border-line rounded-md px-2 py-1">
+                <button class="btn btn-clay w-full justify-center !py-1.5">Save grade</button>
+              </form>
+              {% if row.curve_mode == "manual" %}
+              <form method="post" action="/courses/{{ course.id }}/partial/{{ partial.id }}/override">
+                <input type="hidden" name="student_id" value="{{ row.student.id }}">
+                <input type="hidden" name="final" value="">
+                <button class="text-[11px] text-muted hover:text-clay">↺ reset to exact / auto-curve</button>
+              </form>
+              {% endif %}
+              <!-- additive extra credit -->
+              <form method="post" action="/courses/{{ course.id }}/partial/{{ partial.id }}/extra" class="space-y-2 pt-2 border-t border-line">
+                <input type="hidden" name="student_id" value="{{ row.student.id }}">
+                <div class="text-[11px] font-semibold text-muted uppercase tracking-wide">Extra credit (＋)</div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-muted">+</span>
+                  <input name="extra" type="number" step="0.1" min="0" max="10"
+                         value="{% if xtra %}{{ '%.1f'|format(xtra) }}{% endif %}"
+                         class="w-16 text-sm border border-line rounded-md px-2 py-1 font-mono">
+                  <span class="text-xs text-muted">pts</span>
+                </div>
+                <input name="reason" type="text" placeholder="e.g. cultural event"
+                       value="{% if xtra %}{{ row.extra_note }}{% endif %}"
+                       class="w-full text-xs border border-line rounded-md px-2 py-1">
+                <button class="btn btn-ghost w-full justify-center !py-1.5">Save extra</button>
+              </form>
+            </div>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-3 text-xs text-muted">
+  General × {{ "%.0f"|format(partial.weight_general * 100) }}% +
+  Special × {{ "%.0f"|format(partial.weight_special * 100) }}% +
+  Exam × {{ "%.0f"|format(partial.weight_exam * 100) }}%.
+  Missing activities count as 0. <span class="text-muted/70">Pass mark 7.0 · red→yellow→green by grade.</span>
+</p>
+{% else %}
+<div class="card p-8 text-center text-muted text-sm">No students enrolled yet.</div>
+{% endif %}
+{% endblock %}

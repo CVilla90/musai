@@ -1,0 +1,199 @@
+{#
+  The calendar, the tab map and the plan. Swapped as one block whenever anything changes,
+  because all three are views of the same decision and showing a stale one next to a fresh
+  one is how a professor approves a plan they did not actually read.
+#}
+<div id="plan">
+
+{% if error %}
+  <div class="card p-5 mb-5 border-l-4" style="border-left-color:#F43F5E">
+    <p class="text-sm text-ink">{{ error }}</p>
+  </div>
+{% elif calendar %}
+  <div class="card p-5 mb-5">
+    <div class="flex flex-wrap gap-3 mb-3">
+      {% for p in calendar.periods %}
+      <div class="rounded-lg px-3 py-2 text-xs"
+           style="background:var(--accent-tint);color:var(--accent-deep)">
+        <div class="font-bold">{{ p.name }} · {{ p.weeks }} sem</div>
+        <div>{{ p.starts_on }} → {{ p.ends_on }}</div>
+        <div style="opacity:.75">examen desde {{ p.exam_opens_on }}</div>
+      </div>
+      {% endfor %}
+      {% set mo, mc = calendar.makeup_window() %}
+      <div class="rounded px-3 py-2 text-xs" style="background:#FEF3C7;color:#78350F">
+        <div class="font-bold">Recuperación</div>
+        <div>{{ mo.date() }} → {{ mc.date() }}</div>
+      </div>
+    </div>
+    {% for n in calendar.notes %}
+    <p class="text-xs text-muted">⚠ {{ n }}</p>
+    {% endfor %}
+
+    {#
+      Extensions. Kept as a visible, individually removable list rather than folded into the
+      window, because an extension is a decision a professor announces to students and then
+      has to remember having made.
+    #}
+    <div class="border-t border-line mt-4 pt-3">
+      <form hx-post="/courses/{{ course.id }}/cronograma/shift"
+            hx-target="#plan" hx-swap="outerHTML"
+            class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-muted">Extender</span>
+        <select name="period" class="rounded border-line px-2 py-1 text-xs">
+          {% for p in calendar.periods %}
+          <option value="{{ p.index }}">{{ p.name }}</option>
+          {% endfor %}
+          <option value="">todo el calendario</option>
+        </select>
+        <input type="number" name="days" value="7" step="1"
+               class="rounded border-line px-2 py-1 text-xs" style="width:5rem">
+        <span class="text-muted">día(s)</span>
+        <button class="btn btn-ghost text-xs">↷ Recorrer</button>
+        <span class="text-muted ml-2">
+          Mueve el cierre; lo posterior se recorre igual. No escribe nada todavía.
+        </span>
+      </form>
+
+      {% if data.shifts %}
+      <div class="flex flex-wrap gap-2 mt-3">
+        {% for s in data.shifts %}
+        <form hx-post="/courses/{{ course.id }}/cronograma/shift/drop"
+              hx-target="#plan" hx-swap="outerHTML" class="inline">
+          <input type="hidden" name="index" value="{{ loop.index0 }}">
+          <button class="rounded px-2 py-1 text-xs" style="background:#FEF3C7;color:#78350F"
+                  title="Quitar esta extensión">
+            {% if s.period %}Parcial {{ s.period }}{% else %}Todo{% endif %}
+            {{ '%+d'|format(s.days) }} d ✕
+          </button>
+        </form>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+{% if not plan %}
+  <div class="card p-5 mb-5 text-center">
+    <p class="text-sm text-ink mb-1">Todavía no se ha leído el curso.</p>
+    <p class="text-xs text-muted mb-4">
+      Hay que abrir cada pestaña una vez para saber qué actividades hay y de qué tipo.
+      Tarda alrededor de un minuto y no cambia nada.
+    </p>
+    {# Reading the course is the SAME browser trip the Activities tab needs — one page load
+       per tab, a dozen tabs — so both buttons start one job that serves both. #}
+    <button class="btn btn-accent" hx-post="/courses/{{ course.id }}/activities/import"
+            hx-target="#run-result" hx-swap="innerHTML">
+      Leer el curso
+    </button>
+  </div>
+{% else %}
+
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline gap-3 mb-3">
+      <h2 class="text-sm font-bold text-ink">Pestañas</h2>
+      <span class="text-xs text-muted">
+        La sugerencia se calcula sola; lo que cambies aquí manda y se conserva.
+      </span>
+    </div>
+    <table class="w-full text-xs">
+      <tbody>
+      {% for r in tabmap.rules %}
+      <tr class="border-t border-line">
+        <td class="py-1.5 pr-2 text-muted font-mono" style="width:2.5rem">§{{ r.section }}</td>
+        <td class="py-1.5 pr-3 text-ink">
+          {{ r.label }}
+          {% if r.hidden %}<span class="text-muted">· oculta</span>{% endif %}
+        </td>
+        <td class="py-1.5" style="width:14rem">
+          <form hx-post="/courses/{{ course.id }}/cronograma/tab"
+                hx-target="#plan" hx-swap="outerHTML">
+            <input type="hidden" name="section" value="{{ r.section }}">
+            <select name="choice" class="w-full rounded border-line px-2 py-1 text-xs"
+                    hx-trigger="change" hx-post="/courses/{{ course.id }}/cronograma/tab"
+                    hx-target="#plan" hx-swap="outerHTML"
+                    hx-include="closest form">
+              {% set current = value_of(r) %}
+              {% for val, label in choices %}
+              <option value="{{ val }}" {% if val == current %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </form>
+        </td>
+        <td class="py-1.5 pl-3 text-muted" style="max-width:22rem">{{ r.reason }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if tabmap.needs_review %}
+    <p class="text-xs mt-3" style="color:#9F1239">
+      🔴 No se reconocieron suficientes pestañas de examen para dividir los parciales.
+      Revísalas una por una antes de aplicar.
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline gap-3 mb-3">
+      <h2 class="text-sm font-bold text-ink">Qué se va a escribir</h2>
+      <span class="text-xs text-muted">{{ plan.summary() }}</span>
+    </div>
+    <table class="w-full text-xs">
+      <tbody>
+      {% set ns = namespace(last=None) %}
+      {% for a in plan.activities %}
+        {% set key = (a.section, a.status, a.modname, a.changes|map(attribute='field')|join(',')) %}
+        {% if key != ns.last %}
+        {% set ns.last = key %}
+        {% set same = plan.activities|selectattr('section','equalto',a.section)
+                        |selectattr('status','equalto',a.status)
+                        |selectattr('modname','equalto',a.modname)|list %}
+        <tr class="border-t border-line">
+          <td class="py-1.5 pr-2 text-muted font-mono" style="width:2.5rem">§{{ a.section }}</td>
+          <td class="py-1.5 pr-2 font-mono text-muted" style="width:4rem">{{ a.modname or '?' }}</td>
+          <td class="py-1.5 pr-3 text-ink" style="width:3rem">×{{ same|length }}</td>
+          <td class="py-1.5">
+            {% if a.changes %}
+              {% for c in a.changes %}
+              <span class="inline-block mr-3 font-mono">{{ c.describe() }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="text-muted">{{ a.note }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card p-5">
+    <form hx-post="/courses/{{ course.id }}/cronograma/run"
+          hx-target="#run-result" hx-swap="innerHTML"
+          class="flex flex-wrap items-center gap-4">
+      <button class="btn btn-ghost" name="action" value="dryrun" type="submit">
+        👓 Simulacro ({{ plan.writable|length }} actividades)
+      </button>
+      <button class="btn btn-accent" name="action" value="apply" type="submit">
+        ✅ Aplicar
+      </button>
+      <label class="flex items-center gap-2 text-xs cursor-pointer" style="color:#9F1239">
+        <input type="checkbox" name="live" value="1" class="rounded border-line">
+        <span>Escribir de verdad en Moodle</span>
+      </label>
+      <span class="text-xs text-muted ml-auto">
+        Sin la casilla, <strong>Aplicar</strong> hace un simulacro. Siempre se guarda un
+        archivo para deshacer.
+      </span>
+    </form>
+    <button class="text-xs text-muted hover:text-ink underline mt-3 block"
+            hx-post="/courses/{{ course.id }}/activities/import"
+            hx-target="#run-result" hx-swap="innerHTML">
+      Volver a leer el curso{% if data.read_at %} (última lectura: {{ data.read_at.strftime('%d/%m %H:%M') }}){% endif %}
+    </button>
+  </div>
+{% endif %}
+
+</div>

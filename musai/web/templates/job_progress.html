@@ -1,0 +1,80 @@
+{#
+  Real browser-job progress. Polls once a second while the job is running, and STOPS polling
+  the moment it reaches a terminal state — a poller with no stop condition is how you end up
+  hammering your own server forever.
+#}
+{% set r = job.result or {} %}
+{% set running = job.status in ("pending", "running") %}
+
+<div class="card p-5 border-l-4"
+     style="border-left-color:{% if job.status == 'done' %}#14B8A6{% elif job.status == 'failed' %}#F43F5E{% else %}#F59E0B{% endif %}"
+     {% if running and job_id %}
+       hx-get="/jobs/{{ job_id }}" hx-trigger="every 1s" hx-swap="outerHTML"
+     {% endif %}>
+
+  <div class="flex items-center gap-3 mb-3">
+    {% if running %}<span class="spin"></span>{% endif %}
+    <span class="text-sm font-semibold text-ink">
+      {% if job.status == 'pending' %}Queued…
+      {% elif job.status == 'running' %}
+        {% if r.action == 'read' %}Leyendo el curso…{% else %}Publishing to Moodle…{% endif %}
+      {% elif job.status == 'done' %}
+        {% if r.action == 'read' %}
+          Curso leído: {{ r.activities }} actividades en {{ r.tabs }} pestañas
+        {% elif r.dry_run %}Dry run complete — nothing was saved
+        {% else %}Published ✅{% endif %}
+      {% else %}
+        {% if r.action == 'read' %}No se pudo leer el curso{% else %}Publish failed{% endif %}
+      {% endif %}
+    </span>
+    {% if r.mode %}
+    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded ml-auto"
+          style="background:#EEF2FF;color:#3730A3">{{ r.mode }}</span>
+    {% endif %}
+  </div>
+
+  {% if r.steps %}
+  <ol class="text-xs font-mono space-y-1">
+    {% for s in r.steps %}
+    <li class="{% if 'ERROR' in s.msg %}text-ink{% else %}text-muted{% endif %}">
+      <span style="opacity:.55">{{ s.t }}</span>
+      <span class="ml-2">{% if 'ERROR' in s.msg %}✗{% elif running and loop.last %}▸{% else %}✓{% endif %} {{ s.msg }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="text-xs text-muted font-mono">waiting for the browser…</p>
+  {% endif %}
+
+  {% if r.error %}
+  <p class="text-sm text-ink mt-3">{{ r.error }}</p>
+  {% endif %}
+
+  {% if not running %}
+  <div class="mt-3 flex flex-wrap gap-3 text-xs items-center">
+    {% if r.cmid %}
+    <span class="px-2 py-0.5 rounded" style="background:#F1F5F9;color:#64748B">cmid: {{ r.cmid }}</span>
+    {% endif %}
+    {% if r.course_url %}
+    <a href="{{ r.course_url }}" target="_blank" class="font-semibold" style="color:#4F46E5">
+      Open the course in Moodle →</a>
+    {% endif %}
+    {% if r.backup %}
+    <span class="px-2 py-0.5 rounded font-mono" style="background:#F1F5F9;color:#64748B"
+          title="Los valores anteriores, listos para devolver con --restore">
+      deshacer: {{ r.backup.split('\\')[-1].split('/')[-1] }}</span>
+    {% endif %}
+    {% if r.written is defined %}
+    <span class="text-muted">
+      {{ r.written }} escritas · {{ r.unchanged }} sin cambio
+      {%- if r.snapped %} · {{ r.snapped }} ajustadas al horario que acepta el formulario{% endif %}
+      {%- if r.carried %} · {{ r.carried }} con su margen recorrido{% endif %}
+      {%- if r.failed %} · <strong>{{ r.failed }} con error</strong>{% endif %}
+    </span>
+    {% endif %}
+    {% if r.dry_run %}
+    <span class="text-muted">Tick <strong>Publish for real</strong> to actually save.</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

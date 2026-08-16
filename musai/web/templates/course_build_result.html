@@ -1,0 +1,54 @@
+{% if error %}
+<div class="card p-5 border-l-4" style="border-left-color:#F43F5E">
+  <p class="text-sm text-ink">{{ error }}</p>
+</div>
+{% else %}
+
+<div class="card overflow-hidden mb-4">
+  <div class="px-5 py-3 border-b border-line flex items-center justify-between gap-3 flex-wrap">
+    <div class="text-xs text-muted">
+      Preview — this is exactly what Moodle will show
+      {% if block %}
+      <span class="ml-2 font-mono px-1.5 py-0.5 rounded" style="background:#EEF2FF;color:#3730A3">{{ block.type }}</span>
+      <span class="ml-1 font-mono px-1.5 py-0.5 rounded" style="background:#F1F5F9;color:#64748B">{{ block.accent }}</span>
+      {% endif %}
+    </div>
+    {% if usage %}
+    <span class="text-[10px] font-mono text-muted">
+      {{ usage.tokens }} tok today{% if usage.estimated_usd is not none %} · ~${{ '%.4f'|format(usage.estimated_usd) }}{% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  <div style="background:#ffffff;padding:22px">
+    {{ html|safe }}
+  </div>
+
+  <div class="px-5 py-3.5 border-t border-line flex flex-wrap items-center gap-3">
+    {% if not lucky_job %}
+    {# No data-loading here: the publish response is instant (it returns a poller), and the
+       job's own live step list is the progress indicator. #}
+    <form hx-post="/courses/{{ course.id }}/build/publish" hx-target="#build-result" hx-swap="innerHTML">
+      <input type="hidden" name="html" value="{{ html|e }}">
+      <input type="hidden" name="section" value="{{ section }}">
+      <input type="hidden" name="prompt" value="{{ prompt|e }}">
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="submit" class="btn px-5 py-2 rounded-lg text-sm font-semibold text-white"
+                style="background:#14B8A6">Publish to Moodle</button>
+        <label class="flex items-center gap-2 text-xs text-ink cursor-pointer"
+               title="Without this, the job fills the form and screenshots it but never saves">
+          <input type="checkbox" name="live" value="1" class="rounded border-line">
+          <span>Publish for real <span class="text-muted">(otherwise dry-run)</span></span>
+        </label>
+      </div>
+    </form>
+    <span class="text-xs text-muted">or edit your description above and generate again</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if lucky_job %}
+{% include "job_progress.html" with context %}
+{% endif %}
+
+{% endif %}

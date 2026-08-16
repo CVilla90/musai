@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MUSAI — the console behind your courses</title>
+<meta name="description" content="MUSAI reads your Moodle gradebook, computes each partial and saves it into SEGA. Professor sign-in, @uach.mx only." />
+<meta name="robots" content="noindex" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script>
+/* Runs before the stylesheet paints, deliberately: reading the choice after first
+   paint means the page renders light and then snaps to dark, and that flash is
+   the whole reason theme toggles get a bad name. Kept inline and tiny for the
+   same reason — an external file would be a second round trip before paint. */
+(function () {
+  try {
+    var saved = localStorage.getItem("musai-theme");
+    if (saved === "dark" || saved === "light") {
+      document.documentElement.setAttribute("data-theme", saved);
+    }
+  } catch (e) { /* private mode: fall through to the system preference */ }
+})();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..700,0..100,0..1&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ══ Tokens ═══════════════════════════════════════════════════════════════
+   TWO PALETTES, ONE PAGE. The creamy-light treatment is the default; the
+   original ink treatment is kept intact as the dark mode (DESIGN_DIRECTION
+   §2.3 — "saved for a later dark mode", not deleted).
+
+   🔴 The thing that makes one stylesheet serve both is that everything below
+   is written against ROLES, never against colours: --ground is whatever the
+   page sits on, --fg is whatever reads on top of it. Swapping the theme swaps
+   the values here and nothing else — which is the only way the two versions
+   cannot drift apart. The three rails, the cut tracks, the gradebook ruling
+   and the chat bubbles are all drawn from these roles, so the drawing that
+   carries the meaning survives the light treatment rather than being
+   re-invented in it.
+
+   The old --ink / --paper names are kept as aliases at the bottom so the 500
+   lines of layout below did not have to be rewritten to gain a theme.
+   WARNING: in light mode --ink holds a CREAM value and --paper holds a DARK
+   one. The names describe their ROLE (the ground / the thing that reads on
+   it), and that is exactly what inverts. Use the role names in anything new. */
+:root{
+  /* ── LIGHT (default) ── warm cream, the cockpit's own paper, one step up */
+  --ground:        #FBF9F4;
+  --ground-raised: #FFFFFF;
+  --sunken:        #F2EEE4;   /* code chips, the "them" chat bubble */
+  --hairline:      #E6E0D2;
+  --fg:            #24222C;
+  --fg-soft:       #46434F;   /* long-form body copy, one notch off full ink */
+  --dim:           #66636F;
+  /* 🔴 --dimmer is TEXT and has to be readable: it carries the footer, the rail
+     captions, the "MOODLE · UACH · SUITE + AI" line and — most importantly — the
+     OFF end of each track ("CONFIRM", "LIVE", "WRITE"). It was #5B5869 on ink,
+     which measures 2.68:1 and fails WCAG AA by a mile. That was never the design
+     intent: what says "the code cannot reach this" is the CUT drawn in the track,
+     not type nobody can read. Making the label legible strengthens the drawing.
+     --faint is the new home for the marks that really are decoration — the cut
+     itself, the empty ring, the dead segment — which are graphics, not copy. */
+  --dimmer:        #726E7A;   /* 4.72:1 on --ground */
+  --faint:         #C9C3B4;   /* decorative marks only, never type */
+  --indigo:        #4F46E5;   /* the cockpit's own indigo, unlifted */
+  --teal:          #0F766E;   /* deep enough to read ON cream — #45E0C8 vanishes */
+  --warn:          #B45309;
+  /* 🔴 --black is INK, not a ground. The page is cream and stays cream; this is the
+     weight that cream needs to stop looking washed out — the wordmark, the headline,
+     the rule under a band head. #11101A rather than #000: pure black on warm cream
+     vibrates, and every other ink on this page is warm. 17.9:1. */
+  --black:         #11101A;
+
+  /* ── The accent family ── the SAME seven the cockpit spends on its tabs
+     (base.html `[data-feature]`), so the landing page is not a different product
+     wearing the same name: the colour you meet on the marketing page is the colour
+     that tab is painted in once you are inside.
+     🔴 Each --c-* is the DEEP variant, because on this page an accent is type —
+     a band label, a numeral, an emphasised word. The lighter cockpit values are
+     tuned for 2px underlines and dots on white; as 0.7rem type on cream, clay
+     measures 3.51:1 and fails AA outright. Every value below is the pair that is
+     actually rendered, measured in tests/test_contrast.py. --c-*-soft is a fill
+     only, and never carries type except as its own --c-*. */
+  --c-indigo: #4338CA;  --c-indigo-soft: #EEF0FF;
+  --c-teal:   #0B5A54;  --c-teal-soft:   #E3F5F1;
+  --c-violet: #6428CE;  --c-violet-soft: #F3EEFE;
+  --c-green:  #3C6339;  --c-green-soft:  #E9F2E6;
+  --c-ochre:  #92400E;  --c-ochre-soft:  #FBF0DE;
+  --c-clay:   #9C5730;  --c-clay-soft:   #FBEFE4;
+  --c-plum:   #7E3D56;  --c-plum-soft:   #FAEDF2;
+
+  --grid:  rgba(36,34,44,.055);      /* the gradebook ruling over the hero */
+  --bloom: rgba(79,70,229,.10);      /* the glow behind the headline */
+  --nav:   rgba(251,249,244,.80);
+  --btn-bg:     #FFFFFF;             /* the sign-in button: the ONE lit surface */
+  --btn-fg:     #24222C;
+  --btn-edge:   #DCD5C4;
+  --btn-cast:   rgba(79,70,229,.28);
+
+  --display: "Fraunces", ui-serif, Georgia, serif;
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --gut: clamp(1.25rem, 5vw, 5rem);
+  --rule: 1px solid var(--hairline);
+
+  /* ── Legacy aliases. See the note above. ── */
+  --ink: var(--ground);
+  --ink-raised: var(--ground-raised);
+  --ink-line: var(--hairline);
+  --paper: var(--fg);
+}
+
+/* ── DARK ── the original treatment, every value unchanged, reachable ONLY by
+   pressing the toggle.
+
+   🔴 THERE IS DELIBERATELY NO `@media (prefers-color-scheme: dark)` HERE, and
+   removing it is the whole point of the 2026-08-14 change. There used to be one,
+   and it meant "creamy-light by default" was true of the STYLESHEET and false of
+   the SCREEN: Windows was set to dark, Chrome reported it, the media query won,
+   and the owner opened the page to the ink treatment every time while the README
+   said cream. Nobody had chosen dark — the OS had, silently, on behalf of a
+   design decision it knew nothing about.
+
+   MUSAI's landing page is cream. That is a design decision, not a preference to
+   be negotiated with the operating system, and it is how a professor who is sent
+   this link sees it. Dark is kept because it is good and it is measured — but it
+   is now something a reader ASKS for, and the ask is remembered in localStorage.
+   ⭐ The general form: a default the environment can overrule is not a default.
+   Anything reintroducing that media query re-opens this bug. */
+:root[data-theme="dark"]{
+  --ground:#12131C;         /* panel ground: near-navy, never pure black */
+  --ground-raised:#1A1B27; --sunken:#0D0E16; --hairline:#262838;
+  --fg:#F6F4EE; --fg-soft:#D7D4E2; --dim:#8E8B9E;
+  --dimmer:#858295;         /* 4.95:1 on --ground */
+  --faint:#3A3B4C;
+  --indigo:#7C74FF;         /* cockpit #4F46E5, lifted to read on ink */
+  --teal:#45E0C8;           /* the "locked / verified" signal, and only that */
+  --warn:#FF8A6B;
+  /* On ink the ink-coloured token has to become the PAPER-coloured one, or the
+     wordmark and the headline vanish into the ground they are drawn on. The name
+     is the role — "the heaviest thing on the page" — not the colour. */
+  --black:#F6F4EE;
+
+  /* Every accent lifted. 🔴 Leaving any of these out is not a missing colour, it
+     is the LIGHT value inheriting onto a dark ground — #4338CA indigo on #12131C
+     measures 1.5:1. `test_both_landing_palettes_declare_the_same_roles` fails on
+     exactly that, which is why they are all restated rather than trusted. */
+  --c-indigo:#7C74FF;  --c-indigo-soft:#1B1B33;
+  --c-teal:#45E0C8;    --c-teal-soft:#0E2E2C;
+  --c-violet:#B49CFF;  --c-violet-soft:#241C3D;
+  --c-green:#8FCB86;   --c-green-soft:#1B2E1C;
+  --c-ochre:#E9A23B;   --c-ochre-soft:#33240F;
+  --c-clay:#F0A177;    --c-clay-soft:#33200F;
+  --c-plum:#EC8FB0;    --c-plum-soft:#33172A;
+
+  --grid:rgba(255,255,255,.030); --bloom:rgba(124,116,255,.20); --nav:rgba(18,19,28,.72);
+  --btn-bg:#F6F4EE; --btn-fg:#1F1E28; --btn-edge:#FFFFFF; --btn-cast:rgba(124,116,255,.75);
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+body{
+  margin:0; background:var(--ink); color:var(--paper);
+  font-family:var(--sans); font-size:16px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+a{ color:inherit; }
+:focus-visible{ outline:2px solid var(--teal); outline-offset:3px; border-radius:3px; }
+
+/* The ground: a gradebook ruling, not graph paper — cells are wide and short,
+   the proportion of a grade row. It fades out before it can become wallpaper. */
+.ground{
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:
+    linear-gradient(to right,  var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size:76px 42px;
+  -webkit-mask-image:radial-gradient(115% 80% at 50% 0%, #000 8%, transparent 72%);
+          mask-image:radial-gradient(115% 80% at 50% 0%, #000 8%, transparent 72%);
+}
+.bloom{
+  position:fixed; z-index:0; pointer-events:none;
+  left:50%; top:-16rem; width:min(120rem,150vw); height:46rem; transform:translateX(-50%);
+  background:radial-gradient(50% 50% at 50% 50%, var(--bloom), transparent 70%);
+  filter:blur(8px);
+}
+.wrap{ position:relative; z-index:1; }
+
+/* ══ Top rail ═════════════════════════════════════════════════════════════ */
+.topbar{
+  display:flex; align-items:center; gap:1rem;
+  padding:1.1rem var(--gut); border-bottom:var(--rule);
+  background:var(--nav); backdrop-filter:blur(10px);
+  position:sticky; top:0; z-index:20;
+}
+.mark{ font-family:var(--display); font-optical-sizing:none;
+  font-variation-settings:"opsz" 144,"SOFT" 18,"WONK" 1;
+  font-weight:600; font-size:1.22rem; letter-spacing:.055em; color:var(--black); }
+.mark-sub{ font-family:var(--mono); font-size:.62rem; letter-spacing:.22em;
+  color:var(--dimmer); text-transform:uppercase; margin-left:.85rem; }
+.status{
+  margin-left:auto; display:inline-flex; align-items:center; gap:.5rem;
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.16em; text-transform:uppercase;
+  padding:.34rem .66rem; border-radius:999px; border:1px solid var(--ink-line);
+  color:var(--dim); white-space:nowrap;
+}
+.status .led{ width:6px; height:6px; border-radius:50%; background:var(--teal);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--teal) 16%, transparent); }
+.status.is-live{ color:var(--warn);
+  border-color:color-mix(in srgb, var(--warn) 34%, transparent); }
+
+/* The theme control. Same chip shape as the status beside it, because they are
+   the same kind of thing: a small statement of what mode you are in. */
+.theme{ display:inline-flex; align-items:center; gap:.45rem; background:none;
+  border:1px solid var(--ink-line); border-radius:999px; padding:.33rem .72rem;
+  font-family:var(--mono); font-size:.62rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--dim); cursor:pointer; white-space:nowrap;
+  transition:color .15s ease, border-color .15s ease; }
+.theme:hover{ color:var(--paper); border-color:var(--dim); }
+/* Half-filled disc — the universal contrast glyph, drawn rather than fetched. */
+.theme-ico{ width:10px; height:10px; border-radius:50%; flex:none;
+  border:1px solid currentColor;
+  background:linear-gradient(to right, currentColor 0 50%, transparent 50% 100%); }
+.status.is-live .led{ background:var(--warn); box-shadow:0 0 0 3px color-mix(in srgb, var(--warn) 18%, transparent); }
+
+/* ══ Hero ═════════════════════════════════════════════════════════════════ */
+.hero{ padding:clamp(3.5rem,10vw,7.5rem) var(--gut) clamp(3rem,7vw,5.5rem); max-width:74rem; }
+.eyebrow{
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--dim); display:flex; align-items:center; gap:.7rem; flex-wrap:wrap;
+}
+.eyebrow .greek{ font-family:var(--display); font-variation-settings:"opsz" 144,"SOFT" 18,"WONK" 1;
+  font-size:1rem; letter-spacing:.02em; text-transform:none; color:var(--teal); }
+.eyebrow .tick{ color:var(--dimmer); }
+
+h1{
+  font-family:var(--display); font-optical-sizing:none;
+  font-variation-settings:"opsz" 144,"SOFT" 22,"WONK" 1;
+  font-weight:500; font-size:clamp(2.6rem,7.4vw,5.6rem); line-height:.98;
+  letter-spacing:-.022em; margin:1.5rem 0 0; max-width:16ch;
+  color:var(--black);
+}
+h1 em{ font-style:normal; color:var(--indigo); }
+
+.lede{ margin:1.65rem 0 0; max-width:53ch; font-size:clamp(1rem,1.05vw + .8rem,1.16rem);
+  color:var(--fg-soft); line-height:1.66; }
+.lede strong{ color:var(--paper); font-weight:600; }
+
+/* ══ Sign-in: the one lit surface on the page ════════════════════════════ */
+.signin{ margin-top:2.6rem; display:flex; flex-direction:column; align-items:flex-start; gap:.85rem; }
+.gbtn{
+  display:inline-flex; align-items:center; gap:.8rem; text-decoration:none;
+  background:var(--btn-bg); color:var(--btn-fg); font-weight:600; font-size:.98rem;
+  padding:.92rem 1.5rem .92rem 1.15rem; border-radius:.7rem;
+  border:1px solid var(--btn-edge);
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset, 0 18px 40px -20px var(--btn-cast);
+  transition:transform .16s ease, box-shadow .16s ease;
+}
+.gbtn:hover{ transform:translateY(-1px);
+  box-shadow:0 1px 0 rgba(255,255,255,.5) inset, 0 22px 46px -18px var(--btn-cast); }
+.gbtn:active{ transform:translateY(0); }
+.gbtn svg{ width:20px; height:20px; flex:none; }
+.gbtn[aria-disabled="true"]{ background:var(--ink-raised); color:var(--dim);
+  border-color:var(--ink-line); box-shadow:none; cursor:not-allowed; }
+.gate{ font-family:var(--mono); font-size:.73rem; letter-spacing:.04em; color:var(--dim); }
+.gate b{ color:var(--teal); font-weight:500; }
+
+/* Notices: never vague, never apologetic — what happened, and what to do next. */
+/* Sits ABOVE the button: what went wrong, then the control that retries it. Below the fold
+   an error is an error nobody read. */
+.notice{ margin:2.2rem 0 0; max-width:44rem; border:1px solid var(--ink-line);
+  border-left:2px solid var(--warn); border-radius:.55rem; padding:.9rem 1.1rem;
+  background:var(--ink-raised); font-size:.9rem; }
+.notice.is-quiet{ border-left-color:var(--dimmer); }
+.notice h2{ margin:0 0 .25rem; font-family:var(--mono); font-size:.68rem; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--warn); font-weight:500; }
+.notice.is-quiet h2{ color:var(--dim); }
+.notice p{ margin:0; color:var(--fg-soft); }
+.notice code{ font-family:var(--mono); font-size:.84em; color:var(--paper);
+  background:var(--sunken); padding:.1rem .38rem; border-radius:.25rem; border:1px solid var(--ink-line); }
+
+/* ══ Section scaffolding ═════════════════════════════════════════════════ */
+.band{ border-top:var(--rule); padding:clamp(3rem,6vw,4.75rem) var(--gut);
+  --c: var(--c-indigo); }
+.band[data-c="rails"]{ --c: var(--c-teal); }
+.band[data-c="susai"]{ --c: var(--c-plum); }
+.band-head{ display:flex; align-items:baseline; gap:1rem; margin-bottom:2.4rem; flex-wrap:wrap; }
+/* The band's own accent as a small filled square before its label — the one place
+   the colour is allowed to be pure signal, because a band head carries no meaning
+   a colour could contradict. Drawn, not typed, so it answers to the 3:1 non-text
+   bar rather than 4.5:1. */
+.band-head h2{ font-family:var(--mono); font-size:.7rem; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--dim); font-weight:500; margin:0;
+  display:inline-flex; align-items:center; gap:.6rem; }
+.band-head h2::before{ content:""; width:8px; height:8px; flex:none; border-radius:2px;
+  background:var(--c); }
+.band-head .aside{ font-size:.86rem; color:var(--dimmer); }
+
+.grid4{ display:grid; gap:2.4rem 2.2rem;
+  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); max-width:78rem; }
+/* 🔴 The colour is not decoration and the mapping is not arbitrary: each card is
+   painted in the accent of the cockpit tab that actually does that job — Build is
+   Transfer's clay, Schedule is Dates' violet, Grade is Grades' green, Reach is
+   Messages' plum. A professor who signs in meets the same four colours on the same
+   four jobs. Picking them for variety instead would make the landing page a
+   different product wearing the same name. */
+.cap{ --c: var(--c-indigo); --c-soft: var(--c-indigo-soft); }
+.cap[data-c="transfer"]{ --c:var(--c-clay);   --c-soft:var(--c-clay-soft); }
+.cap[data-c="dates"]   { --c:var(--c-violet); --c-soft:var(--c-violet-soft); }
+.cap[data-c="grades"]  { --c:var(--c-green);  --c-soft:var(--c-green-soft); }
+.cap[data-c="messages"]{ --c:var(--c-plum);   --c-soft:var(--c-plum-soft); }
+/* A 2px rule, the width of the numeral under it. Enough colour to be felt from
+   across the page without a filled card, which cream cannot carry four times in a
+   row without turning into a chart. */
+.cap{ padding-top:1rem; border-top:2px solid var(--c); }
+.cap h3{ font-family:var(--display); font-variation-settings:"opsz" 144,"SOFT" 18,"WONK" 1;
+  font-weight:500; font-size:1.42rem; margin:0 0 .5rem; letter-spacing:-.01em;
+  color:var(--black); }
+.cap p{ margin:0; color:var(--dim); font-size:.93rem; line-height:1.62; }
+.cap .n{ display:inline-block; font-family:var(--mono); font-size:.64rem; letter-spacing:.2em;
+  color:var(--c); background:var(--c-soft); text-transform:uppercase; margin-bottom:.85rem;
+  padding:.2rem .5rem; border-radius:.3rem; }
+
+/* ══ The three rails — the signature ═════════════════════════════════════
+   The drawing carries the meaning: a track that is CUT is a position the code
+   cannot reach, and a track that runs UNBROKEN is a position you can move to.
+   That is why rail 2 looks different from rails 1 and 3 — it is the only one
+   of the three whose far end is a real switch. */
+.rails{ display:grid; gap:1px; background:var(--ink-line); border:var(--rule);
+  border-radius:.8rem; overflow:hidden; max-width:78rem; }
+/* Label left, mechanism right — the reading order of an instrument panel. Stacks under 60rem. */
+.rail{ background:var(--ink); padding:1.9rem clamp(1.15rem,2.4vw,2.1rem);
+  display:grid; grid-template-columns:1fr; gap:1.6rem 3rem; align-items:center; }
+@media (min-width:60rem){ .rail{ grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); } }
+.rail-top{ display:flex; align-items:baseline; gap:.85rem; margin-bottom:.55rem; flex-wrap:wrap; }
+/* Each rail gets its own accent on the NUMERAL only. 🔴 The track keeps teal, and
+   that is deliberate: teal on this page means "locked / verified" and nothing else,
+   so recolouring `.stop.on` or `.dot` per rail would spend the one signal the
+   drawing depends on. The label may be colourful; the instrument may not. */
+.rail:nth-child(1){ --c: var(--c-teal); }
+.rail:nth-child(2){ --c: var(--c-ochre); }
+.rail:nth-child(3){ --c: var(--c-plum); }
+.rail-top .n{ font-family:var(--mono); font-size:.64rem; letter-spacing:.18em;
+  color:var(--c); text-transform:uppercase; font-weight:500; }
+.rail-top h3{ font-family:var(--display); font-variation-settings:"opsz" 144,"SOFT" 18,"WONK" 1;
+  font-weight:500; font-size:1.3rem; margin:0; letter-spacing:-.01em; color:var(--black); }
+.rail-body p{ margin:0; color:var(--dim); font-size:.92rem; max-width:52ch; }
+
+/* Held to instrument width. Stretched across the full band the cut floats in the middle of
+   nowhere and stops reading as one mechanism. */
+.track{ display:flex; align-items:center; gap:.62rem; font-family:var(--mono);
+  font-size:.68rem; letter-spacing:.15em; text-transform:uppercase; flex-wrap:nowrap;
+  max-width:34rem; }
+.stop{ display:inline-flex; align-items:center; gap:.5rem; white-space:nowrap; }
+.stop.on{ color:var(--teal); }
+.stop.off{ color:var(--dimmer); }
+.dot{ width:9px; height:9px; border-radius:50%; background:var(--teal); flex:none;
+  box-shadow:0 0 0 4px color-mix(in srgb, var(--teal) 15%, transparent); }
+.ring{ width:9px; height:9px; border-radius:50%; border:1px solid var(--faint); flex:none; }
+.seg{ height:1px; flex:1 1 auto; min-width:.9rem; }
+.seg.solid{ background:linear-gradient(to right,var(--teal),var(--ink-line)); }
+.seg.dead{ background:repeating-linear-gradient(to right,
+  var(--ink-line) 0 3px, transparent 3px 7px); }
+.seg.open{ background:var(--ink-line); }
+/* The cut: the track physically stops. This is rail 1 and rail 3's whole point. */
+.cut{ position:relative; width:16px; height:12px; flex:none; }
+.cut::before,.cut::after{ content:""; position:absolute; top:0; width:1px; height:12px;
+  background:var(--dim); transform:skewX(-24deg); }
+.cut::before{ left:4px; } .cut::after{ left:10px; }
+.rail-foot{ margin:1.25rem 0 0; font-family:var(--mono); font-size:.68rem; color:var(--dimmer);
+  letter-spacing:.04em; }
+.rail-foot b{ color:var(--dim); font-weight:400; }
+
+/* ══ SUSAI ═══════════════════════════════════════════════════════════════ */
+.susai{ display:grid; gap:2rem clamp(2rem,5vw,4.5rem); align-items:start;
+  grid-template-columns:repeat(auto-fit,minmax(19rem,1fr)); max-width:78rem; }
+.susai h3{ font-family:var(--display); font-variation-settings:"opsz" 144,"SOFT" 22,"WONK" 1;
+  font-weight:500; font-size:clamp(1.7rem,3vw,2.3rem); margin:0 0 .8rem; letter-spacing:-.015em; }
+.susai p{ margin:0 0 1rem; color:var(--dim); max-width:50ch; font-size:.96rem; }
+.susai .who{ font-family:var(--mono); font-size:.68rem; letter-spacing:.15em;
+  text-transform:uppercase; color:var(--teal); }
+.chat{ border:var(--rule); border-radius:.8rem; background:var(--ink-raised); padding:1.15rem;
+  display:flex; flex-direction:column; gap:.6rem; max-width:26rem; }
+.bub{ padding:.6rem .85rem; border-radius:.85rem; font-size:.9rem; max-width:85%; line-height:1.5; }
+.bub.them{ background:var(--sunken); border:var(--rule); color:var(--fg-soft);
+  align-self:flex-start;
+  border-bottom-left-radius:.25rem; }
+.bub.us{ background:color-mix(in srgb, var(--indigo) 15%, transparent);
+  border:1px solid color-mix(in srgb, var(--indigo) 32%, transparent);
+  color:var(--fg); align-self:flex-end; border-bottom-right-radius:.25rem; }
+.chat .ro{ font-family:var(--mono); font-size:.6rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--dimmer); margin-top:.3rem; }
+
+/* ══ Footer ══════════════════════════════════════════════════════════════ */
+footer{ border-top:var(--rule); padding:2.2rem var(--gut) 3rem;
+  display:flex; gap:1rem 2rem; flex-wrap:wrap; align-items:baseline;
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.06em; color:var(--dimmer); }
+footer a{ color:var(--dim); text-decoration:none; border-bottom:1px solid var(--ink-line); }
+footer a:hover{ color:var(--paper); }
+footer .sep{ margin-left:auto; }
+
+/* ══ Motion: one orchestrated entrance, then stillness ═══════════════════ */
+.rise{ opacity:0; transform:translateY(14px); animation:rise .78s cubic-bezier(.2,.7,.25,1) forwards; }
+@keyframes rise{ to{ opacity:1; transform:none; } }
+.d1{animation-delay:.06s}.d2{animation-delay:.16s}.d3{animation-delay:.28s}
+.d4{animation-delay:.4s}.d5{animation-delay:.52s}
+.reveal{ opacity:0; transform:translateY(16px); transition:opacity .45s ease, transform .45s ease; }
+.reveal.seen{ opacity:1; transform:none; }
+@media (prefers-reduced-motion:reduce){
+  .rise,.reveal{ animation:none !important; transition:none !important; opacity:1 !important;
+    transform:none !important; }
+  .gbtn{ transition:none; }
+}
+@media (max-width:560px){
+  .track{ font-size:.62rem; letter-spacing:.1em; gap:.4rem; }
+  .mark-sub{ display:none; }
+}
+</style>
+</head>
+<body>
+<div class="ground" aria-hidden="true"></div>
+<div class="bloom" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <header class="topbar">
+    <span class="mark">MUSAI</span>
+    <span class="mark-sub">Moodle · UACH · Suite + AI</span>
+    {% if dry_run %}
+    <span class="status" title="Every write to Moodle and SEGA is simulated until you say otherwise.">
+      <span class="led"></span> Dry-run · no writes
+    </span>
+    {% else %}
+    <span class="status is-live" title="Writes to Moodle and SEGA are enabled.">
+      <span class="led"></span> Live · writes enabled
+    </span>
+    {% endif %}
+    <button class="theme" type="button" id="theme-toggle" aria-pressed="false"
+            aria-label="Switch between the light and the dark treatment">
+      <span class="theme-ico" aria-hidden="true"></span>
+      <span id="theme-label">Dark</span>
+    </button>
+  </header>
+
+  <!-- ══ Hero ══════════════════════════════════════════════════════════ -->
+  <main class="hero">
+    <p class="eyebrow rise d1">
+      <span class="greek">Μοῦσαι</span>
+      <span class="tick">/</span>
+      <span>Professor console</span>
+      <span class="tick">/</span>
+      <span>Facultad de Ciencias de la Cultura Física</span>
+    </p>
+
+    <h1 class="rise d2">Every course you teach, on <em>one console</em>.</h1>
+
+    <p class="lede rise d3">
+      MUSAI reads your Moodle gradebook, computes each partial and saves it into SEGA.
+      It builds the course, dates every activity, and writes to your groups —
+      <strong>then stops, and waits for you to confirm.</strong>
+    </p>
+
+    <!-- Notices, ahead of the button. Each one names what happened and what to do about it. -->
+    {% if not auth_configured %}
+    <div class="notice rise d4" role="alert">
+      <h2>Configuration incomplete</h2>
+      <p>
+        {% for key in missing_config %}<code>{{ key }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        {{ 'is' if missing_config|length == 1 else 'are' }} not set in <code>.env</code>.
+        Until then every cockpit route answers 503 — MUSAI seals itself rather than serving
+        the gradebook without a gate. Set the value{{ '' if missing_config|length == 1 else 's' }}
+        and restart uvicorn fully; <code>--reload</code> does not reread <code>.env</code>.
+      </p>
+    </div>
+    {% elif auth_error == 'domain' %}
+    <div class="notice rise d4" role="alert">
+      <h2>Wrong account</h2>
+      <p>
+        {% if attempted %}<code>{{ attempted }}</code> is not{% else %}That account is not{% endif %}
+        an <b>@{{ allowed_domain }}</b> address. MUSAI accepts university accounts only.
+        Sign in again and pick your <b>@{{ allowed_domain }}</b> account — or switch accounts in Google first.
+      </p>
+    </div>
+    {% elif auth_error == 'student' %}
+    <div class="notice rise d4" role="alert">
+      <h2>Student account</h2>
+      <p>
+        {% if attempted %}<code>{{ attempted }}</code> is a student address.{% else %}That is a
+        student address.{% endif %}
+        MUSAI is the professor's console — your courses, grades and deadlines live in Moodle,
+        and SUSAI answers on WhatsApp. If you are a professor, sign in with your staff
+        <b>@{{ allowed_domain }}</b> account instead.
+      </p>
+    </div>
+    {% elif auth_error == 'unverified' %}
+    <div class="notice rise d4" role="alert">
+      <h2>Address not verified</h2>
+      <p>Google has not verified the email on that account, so MUSAI cannot treat it as proof of
+         who you are. Verify it with Google, then sign in again.</p>
+    </div>
+    {% elif auth_error == 'expired' %}
+    <div class="notice is-quiet rise d4" role="status">
+      <h2>Session ended</h2>
+      <p>You were signed out after a week of inactivity. Sign in to pick up where you left off.</p>
+    </div>
+    {% elif auth_error %}
+    <div class="notice rise d4" role="alert">
+      <h2>Sign-in did not complete</h2>
+      <p>Google returned before the round trip finished. Try again — if it repeats, check that
+         this exact origin is listed as an authorized redirect URI on the OAuth client.</p>
+    </div>
+    {% elif signed_out %}
+    <div class="notice is-quiet rise d4" role="status">
+      <h2>Signed out</h2>
+      <p>Your session on this browser is closed.</p>
+    </div>
+    {% endif %}
+
+    <div class="signin rise d5">
+      {% if auth_configured %}
+      <a class="gbtn" href="/auth/login?next={{ next|urlencode }}">
+        <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+          <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l-.1.3 6.5 5 .5.1c4.1-3.8 6.6-9.4 6.6-15.7z"/>
+          <path fill="#34A853" d="M24 46c5.9 0 10.9-1.9 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.500-9.1l-.3.1-6.7 5.2-.1.3C7.9 41 15.4 46 24 46z"/>
+          <path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.8-2.9-.8-4.4s.3-3.1.7-4.4v-.4l-6.8-5.3-.2.1C2.9 16.9 2 20.3 2 24s.9 7.1 2.4 10.1l7.1-5.7z"/>
+          <path fill="#EA4335" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.3 29.9 2 24 2 15.4 2 7.9 7 4.4 13.9l7.1 5.7c1.8-5.3 6.7-9.1 12.5-9.1z"/>
+        </svg>
+        Sign in with Google
+      </a>
+      <p class="gate">Only <b>@{{ allowed_domain }}</b> accounts. Students never sign in here.</p>
+      {% else %}
+      <span class="gbtn" aria-disabled="true">
+        <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" style="opacity:.35">
+          <path fill="currentColor" d="M24 4a20 20 0 100 40 20 20 0 000-40zm0 6a14 14 0 0111.1 22.6L17.4 14.9A13.9 13.9 0 0124 10zm0 28a14 14 0 01-11.1-22.6l17.7 17.7A13.9 13.9 0 0124 38z"/>
+        </svg>
+        Sign-in unavailable
+      </span>
+      <p class="gate">The console is sealed until it is configured.</p>
+      {% endif %}
+    </div>
+
+  </main>
+
+  <!-- ══ What it does ══════════════════════════════════════════════════ -->
+  <section class="band">
+    <div class="band-head reveal">
+      <h2>What it does</h2>
+      <span class="aside">Four jobs, each one a full afternoon by hand.</span>
+    </div>
+    <div class="grid4">
+      <article class="cap reveal" data-c="transfer">
+        <span class="n">Build</span>
+        <h3>Copy a course that works</h3>
+        <p>Restore a finished course into another group — sections, dates, filters and tab
+           visibility intact — then count it back from a fresh login, because a restore's own
+           report has been wrong more often than it has been right.</p>
+      </article>
+      <article class="cap reveal" data-c="dates">
+        <span class="n">Schedule</span>
+        <h3>Date every activity</h3>
+        <p>Cut the semester into partials and write open and close dates across every quiz,
+           assignment and forum. Each one is read back from its own settings form, which is the
+           only reading that tells the truth.</p>
+      </article>
+      <article class="cap reveal" data-c="grades">
+        <span class="n">Grade</span>
+        <h3>Compute the partial, exactly</h3>
+        <p>General 60, Special 20, Exam 20. The exact machine grade is kept untouched; curves and
+           extra credit are separate, visible layers on top of it, never edits to the original.</p>
+      </article>
+      <article class="cap reveal" data-c="messages">
+        <span class="n">Reach</span>
+        <h3>Write to a whole group</h3>
+        <p>One message to every student in a course, recorded before it is sent so that a retry
+           can never deliver it twice. Who was skipped is stored too, with the reason.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ══ The three rails — signature ═══════════════════════════════════ -->
+  <section class="band" data-c="rails">
+    <div class="band-head reveal">
+      <h2>The three rails</h2>
+      <span class="aside">A cut track is a position the code cannot reach. An unbroken one is a switch you can throw.</span>
+    </div>
+
+    <div class="rails reveal">
+
+      <div class="rail">
+        <div class="rail-body">
+          <div class="rail-top">
+            <span class="n">Rail 1</span>
+            <h3>Save, never confirm</h3>
+          </div>
+          <p>The SEGA adapter can click <i>Guardar</i>. It has no code path to <i>Confirmar</i> —
+             not a disabled button, not a warning dialog, simply no route there at all.</p>
+        </div>
+        <div class="rail-inst">
+          <div class="track" role="img"
+               aria-label="Track: locked at Save. Confirm is unreachable — the track is cut.">
+            <span class="stop on"><span class="dot"></span>Save</span>
+            <span class="seg solid"></span>
+            <span class="cut"></span>
+            <span class="seg dead"></span>
+            <span class="stop off"><span class="ring"></span>Confirm</span>
+          </div>
+          <p class="rail-foot">Confirming a grade is <b>yours</b>, and stays a human act.</p>
+        </div>
+      </div>
+
+      <div class="rail">
+        <div class="rail-body">
+          <div class="rail-top">
+            <span class="n">Rail 2</span>
+            <h3>Dry-run by default</h3>
+          </div>
+          <p>Every write to a live system is simulated first and prints what it would have done.
+             This is the one rail with a far end you can actually reach — deliberately, because a
+             real write has to be a decision somebody made out loud.</p>
+        </div>
+        <div class="rail-inst">
+        {% if dry_run %}
+        <div class="track" role="img"
+             aria-label="Track: currently at Dry-run. Live is reachable but not selected.">
+          <span class="stop on"><span class="dot"></span>Dry-run</span>
+          <span class="seg solid"></span>
+          <span class="seg open"></span>
+          <span class="stop off"><span class="ring"></span>Live</span>
+        </div>
+        <p class="rail-foot">Right now: <b>simulating. Nothing reaches Moodle or SEGA.</b></p>
+        {% else %}
+        <div class="track" role="img" aria-label="Track: currently at Live. Writes are enabled.">
+          <span class="stop off"><span class="ring"></span>Dry-run</span>
+          <span class="seg open"></span>
+          <span class="seg solid" style="background:linear-gradient(to right,var(--ink-line),var(--warn))"></span>
+          <span class="stop on" style="color:var(--warn)">
+            <span class="dot"
+                  style="background:var(--warn);
+                         box-shadow:0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent)"></span>Live
+          </span>
+        </div>
+        <p class="rail-foot">Right now: <b>writes are enabled.</b> Someone set this on purpose.</p>
+        {% endif %}
+        </div>
+      </div>
+
+      <div class="rail">
+        <div class="rail-body">
+          <div class="rail-top">
+            <span class="n">Rail 3</span>
+            <h3>SUSAI is read-only</h3>
+          </div>
+          <p>The student assistant runs in its own process, as its own database role. It can
+             append to a conversation and nothing else. It cannot see the grading code, let
+             alone run it.</p>
+        </div>
+        <div class="rail-inst">
+          <div class="track" role="img"
+               aria-label="Track: locked at Read. Write is unreachable — the track is cut.">
+            <span class="stop on"><span class="dot"></span>Read</span>
+            <span class="seg solid"></span>
+            <span class="cut"></span>
+            <span class="seg dead"></span>
+            <span class="stop off"><span class="ring"></span>Write</span>
+          </div>
+          <p class="rail-foot">Enforced by the <b>database</b>, not by the prompt.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══ SUSAI ═════════════════════════════════════════════════════════ -->
+  <section class="band" data-c="susai">
+    <div class="band-head reveal">
+      <h2>The other half</h2>
+      <span class="aside">Your students never see this console.</span>
+    </div>
+    <div class="susai">
+      <div class="reveal">
+        <p class="who">SUSAI · on WhatsApp</p>
+        <h3>Students ask WhatsApp, not you.</h3>
+        <p>MUSAI inspires the professor; SUSAI supports the students. Deadlines, grades and what
+           is due next — answered on the number they already have open, at eleven at night, without
+           a login and without reaching you.</p>
+        <p>It reads. It never grades, never edits a course, and never sees a roster it was not asked about.</p>
+      </div>
+      <div class="chat reveal" aria-label="Example WhatsApp exchange with SUSAI">
+        <div class="bub them">¿Cuándo cierra el Workbook Practice #2?</div>
+        <div class="bub us">Cierra el viernes 21 a las 23:59. Llevas 3 de 4 actividades del Parcial 2.</div>
+        <div class="bub them">¿Y mi calificación del parcial 1?</div>
+        <div class="bub us">8.4. Si quieres el desglose por actividad, te lo mando.</div>
+        <p class="ro">Read-only · no grade was changed in this conversation</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>MUSAI · Moodle UACH Suite + AI</span>
+    <span>Μοῦσαι — the Muses, for the professor</span>
+    <a href="mailto:professor@uach.mx">professor@uach.mx</a>
+    <span class="sep">CV Labs for Education</span>
+  </footer>
+
+</div>
+
+<script>
+  // Scroll reveal, and nothing else. The sign-in link works with JavaScript off.
+  (function () {
+    var items = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window) ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      items.forEach(function (el) { el.classList.add('seen'); });
+      return;
+    }
+    // Positive bottom margin so a block starts fading BEFORE it scrolls into view. With a
+    // negative one, a fast scroll lands on a section that is still at opacity 0 and the page
+    // looks broken rather than animated.
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('seen'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px 10% 0px', threshold: 0 });
+    items.forEach(function (el, i) {
+      el.style.transitionDelay = (Math.min(i, 3) * 55) + 'ms';
+      io.observe(el);
+    });
+  })();
+</script>
+<script>
+/* The toggle. Three states exist and only two of them are stored: "light" and
+   "dark" are explicit choices, and NOTHING stored means "follow the system" —
+   which is why the button reports what it will switch TO rather than claiming
+   to know what the reader is currently seeing. `matchMedia` answers that. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById("theme-toggle");
+  var label = document.getElementById("theme-label");
+  if (!btn) return;
+
+  // 🔴 The system preference is deliberately NOT consulted. The stylesheet has no
+  // prefers-color-scheme branch any more (see the token block), so the only two
+  // states are "the reader pressed the button" and "cream". Asking matchMedia here
+  // would put the label back out of step with the page for every reader on a dark
+  // OS — the button would offer "Light" on a page that is already cream.
+  function isDark() {
+    return root.getAttribute("data-theme") === "dark";
+  }
+  function paintLabel() {
+    var dark = isDark();
+    label.textContent = dark ? "Light" : "Dark";
+    btn.setAttribute("aria-pressed", dark ? "true" : "false");
+  }
+  btn.addEventListener("click", function () {
+    var next = isDark() ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("musai-theme", next); } catch (e) {}
+    paintLabel();
+  });
+  // Nothing listens to the system any more. A reader switching Windows to dark
+  // mode mid-visit keeps the cream page they were given, which is the intent.
+  paintLabel();
+})();
+</script>
+</body>
+</html>

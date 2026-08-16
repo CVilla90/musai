@@ -1,0 +1,83 @@
+{#
+  The course workspace — one course, several jobs to do on it.
+
+  Every page about a single course extends THIS, not `base.html`, so the tab strip and the
+  course's identity are structural rather than something each template remembers to include.
+  That is the point of DESIGN_DIRECTION §3: **a professor must never have to guess which course
+  a destructive button belongs to.** The Restore button lives two tabs away from a colleague's
+  group code, and "which course am I on?" cannot be a question the page leaves open.
+
+  A page supplies:
+    {% block feature %}       one of the accent keys — colours the current tab and the buttons
+    {% set active_tab = ... } which tab is lit  (set in the child, before the blocks)
+    {% block course_content %}
+#}
+{% extends "base.html" %}
+
+{% set TABS = [
+  ('overview',   'Overview',   '/courses/' ~ course.id,                'courses'),
+  ('activities', 'Activities', '/courses/' ~ course.id ~ '/activities','activities'),
+  ('dates',      'Dates',      '/courses/' ~ course.id ~ '/cronograma','dates'),
+  ('grades',     'Grades',     '/courses/' ~ course.id ~ '/grades',    'grades'),
+  ('content',    'Content',    '/courses/' ~ course.id ~ '/hub',       'content'),
+  ('transfer',   'Transfer',   '/courses/' ~ course.id ~ '/transfer',  'transfer'),
+  ('messages',   'Messages',   '/courses/' ~ course.id ~ '/mensajes',  'messages'),
+] %}
+
+{% block title %}{{ course.group_code }} · {{ tab_title | default('MUSAI') }}{% endblock %}
+
+{% block content %}
+
+{# ── Identity. Pinned on every tab, deliberately above the strip. ───────────── #}
+<header class="mb-1">
+  <a href="/" class="text-xs text-muted hover:text-ink">← All courses</a>
+
+  <div class="mt-2 flex items-end justify-between gap-4 flex-wrap">
+    <div class="flex items-baseline gap-3 flex-wrap">
+      <h1 class="font-serif text-3xl font-semibold text-ink leading-none">
+        {{ course.group_code }}
+      </h1>
+      <span class="text-ink-soft text-sm">{{ course.subject }}</span>
+      {% if course.cycle %}
+      <span class="chip chip-quiet">{{ course.cycle }}</span>
+      {% endif %}
+    </div>
+
+    <div class="flex items-center gap-2 flex-wrap">
+      {% if course.moodle_course_id %}
+      <span class="val text-muted" title="Moodle course id">idc {{ course.moodle_course_id }}</span>
+      <a href="https://{{ course.moodle_server or 'virtual3' }}.uach.mx/course/view.php?id={{ course.moodle_course_id }}"
+         target="_blank" rel="noopener" class="btn btn-ghost">
+        Open in Moodle ↗
+      </a>
+      {% else %}
+      {# Not decoration: almost everything here needs the idc, so saying it is missing once,
+         here, saves seven tabs from each inventing their own way to fail. #}
+      <span class="chip" style="background:var(--danger-tint);color:var(--danger);
+                   border-color:color-mix(in srgb, var(--danger) 20%, transparent)">
+        No Moodle id — re-map from the cockpit
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if course.moodle_fullname and course.moodle_fullname != course.group_code %}
+  <p class="text-xs text-muted mt-1.5">
+    Moodle calls it <span class="text-ink-soft">{{ course.moodle_fullname }}</span>
+  </p>
+  {% endif %}
+</header>
+
+{# ── Level 2 nav: what am I doing to this course? ──────────────────────────── #}
+<nav class="tabs mt-4 mb-7" aria-label="Course sections">
+  {% for key, label, href, accent in TABS %}
+  <a href="{{ href }}" class="tab" data-feature="{{ accent }}"
+     {% if key == active_tab %}aria-current="page"{% endif %}>
+    {{ label }}{% if tab_badges and tab_badges.get(key) %}<span class="tab-dot"
+       title="{{ tab_badges[key] }}"></span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
+
+{% block course_content %}{% endblock %}
+{% endblock %}

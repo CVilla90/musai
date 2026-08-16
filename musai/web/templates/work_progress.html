@@ -1,0 +1,284 @@
+{#
+  The waiting component — DESIGN_DIRECTION §4.
+
+  One card for every slow thing MUSAI does: mapping, backup, the restore pre-flight, the
+  restore itself, the Cronograma, a credential check. It polls `/work/{id}` while the job runs
+  and STOPS the moment it is terminal — `job_id` is only passed in by the route while the job
+  is live, so the stop condition lives in one place rather than in a Jinja condition that can
+  drift from it.
+
+  ── What makes it honest ──────────────────────────────────────────────────────────────────
+  * Every tick comes from `musai/checklists.py`, matched against a step the job really emitted.
+    Nothing on this card advances because time passed.
+  * The elapsed clock is real, and always shown. Without it a slow job and a hung job look
+    identical — and this project once diagnosed a Playwright timeout as a dead host and re-ran,
+    messaging 35 students twice.
+  * **Three terminal states, not two**: done · refused (MUSAI declined; nothing changed) ·
+    lost track (the worker vanished, which says nothing about what Moodle did).
+  * The expected duration is stated in words, from measurement. Never a countdown.
+
+  ⚠️ Separate from `job_progress.html`, which belongs to the publish/Cronograma routers and
+  polls `/jobs/{id}`. Two pollers on one path would each render the other's jobs as an empty box.
+#}
+{% set r = job.result or {} %}
+{% set running = job.running and not job.stale %}
+{% set pf = r.preflight or {} %}
+{% set refused = r.refused %}
+{% set failed = job.status == 'failed' and not refused %}
+{% set steps = r.steps or [] %}
+
+{% set state_color = '#4D7C4A' if job.status == 'done'
+                     else '#8B8992' if job.stale
+                     else 'var(--danger)' if failed
+                     else '#A16207' if refused
+                     else 'var(--accent)' %}
+
+<div class="card overflow-hidden" id="work-{{ job.id or 'x' }}"
+     {% if running and job_id %}
+       hx-get="/work/{{ job_id }}" hx-trigger="every 1500ms" hx-swap="outerHTML"
+     {% endif %}>
+
+  {# ── Header: what, and how long it has really been ───────────────────────── #}
+  <div class="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-line"
+       style="background:{% if running %}var(--accent-tint){% else %}transparent{% endif %}">
+    {% if running %}
+    <span class="spin shrink-0"></span>
+    {% else %}
+    <span class="shrink-0 w-[1.05rem] h-[1.05rem] rounded-full flex items-center justify-center
+                 text-[10px] font-bold text-white" style="background:{{ state_color }}">
+      {% if job.status == 'done' %}✓{% elif job.stale %}?{% else %}!{% endif %}
+    </span>
+    {% endif %}
+
+    <span class="text-sm font-semibold text-ink">
+      {% if job.stale %}MUSAI lost track of this job
+      {% elif running %}
+        {% if kind == 'map_courses' %}Reading your Moodle dashboard
+        {% elif kind == 'course_backup' %}Creating the backup
+        {% elif kind == 'restore_check' %}Checking what a restore would do
+        {% elif kind == 'course_restore' %}Restoring {{ job.params.group or 'the course' }}
+        {% elif kind == 'course_dates' %}Writing the dates
+        {% elif kind == 'credential_check' %}Signing in to check the password
+        {% else %}Working{% endif %}
+      {% elif job.status == 'done' %}
+        {% if kind == 'map_courses' %}
+          {{ r.created }} course{{ '' if r.created == 1 else 's' }} added{% if r.unchanged %} · {{ r.unchanged }} already there{% endif %}
+        {% elif kind == 'course_backup' %}Backup ready
+        {% elif kind == 'restore_check' %}Safety check passed
+        {% elif kind == 'course_restore' %}Restored
+        {% elif kind == 'course_dates' %}Dates written
+        {% elif kind == 'credential_check' %}Password works — {{ r.tiles }} course{{ '' if r.tiles == 1 else 's' }} visible
+        {% else %}Done{% endif %}
+      {% elif refused %}
+        {# 🔴 A refusal is not a failure. "Didn't work" over a deliberate refusal reads as a
+           bug and invites a retry; what a refusal needs is an action. #}
+        MUSAI didn't do this — nothing was changed
+      {% else %}Didn't work{% endif %}
+    </span>
+
+    {# The real clock — and its WORDING has to match the state, or it says something false.
+       "took 90m 0s" on a lost job claims MUSAI watched it work for ninety minutes; what
+       actually happened is that MUSAI stopped watching ninety minutes ago and has no idea
+       how long anything took. A refusal gets no clock at all: nothing ran, so a duration is
+       noise dressed up as a measurement. #}
+    {% set s = job.age_s or 0 %}
+    {# Second precision below ten minutes, where it is what you are watching; minutes above it,
+       where "90m 0s" is two characters of noise on a number nobody reads that closely. #}
+    {% set clock %}
+      {%- if s < 60 %}{{ s }}s
+      {%- elif s < 600 %}{{ s // 60 }}m {{ s % 60 }}s
+      {%- elif s < 3600 %}{{ s // 60 }}m
+      {%- else %}{{ s // 3600 }}h {{ (s % 3600) // 60 }}m{% endif -%}
+    {% endset %}
+    {% if not refused %}
+    <span class="ml-auto val text-muted shrink-0">
+      {% if running %}{{ clock }}
+      {% elif job.stale %}started {{ clock }} ago
+      {% else %}took {{ clock }}{% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  {# ── Lost track. Deliberately NOT a failure. ─────────────────────────────── #}
+  {% if job.stale %}
+  <div class="px-5 py-4 text-sm text-ink leading-relaxed">
+    MUSAI stopped following this job about {{ (job.age_s // 60) }} minutes ago — usually the app
+    was restarted, or the laptop slept, while it ran.
+    <strong>That does not tell you it failed.</strong> Moodle may well have finished.
+    <span class="block mt-2 text-muted">
+      Open the course and look before running anything again. Re-running a restore on a job
+      that actually succeeded is what deletes a course.
+    </span>
+  </div>
+
+  {# ── Refused. The reason, and nothing else. ──────────────────────────────── #}
+  {% elif refused %}
+  <div class="px-5 py-4">
+    <p class="text-sm text-ink whitespace-pre-line leading-relaxed">{{ r.error }}</p>
+    {# No step trail here on purpose: on a refusal MUSAI did nothing, and printing an empty
+       list under a red heading buries the one sentence that says what to do next. #}
+  </div>
+
+  {% else %}
+  <div class="px-5 py-4">
+
+    {# ── The checklist. Every tick is evidence. ───────────────────────────── #}
+    {% if checklist %}
+    <ul class="space-y-1.5 mb-4">
+      {% for item in checklist %}
+      <li class="flex items-start gap-2.5 text-sm
+                 {% if item.state == 'done' %}text-ink
+                 {% elif item.state == 'current' %}text-ink font-medium
+                 {% else %}text-muted{% endif %}">
+        <span class="shrink-0 mt-[.15rem] w-4 text-center leading-none">
+          {% if item.state == 'done' %}
+          <span style="color:#4D7C4A">✓</span>
+          {% elif item.state == 'current' %}
+          <span class="tick-current" style="color:var(--accent)">▸</span>
+          {% elif item.state == 'skipped' %}
+          {# Not a tick. MUSAI did not see this step, and inventing the evidence is the one
+             thing this component must never do. #}
+          <span class="text-muted" title="MUSAI didn't see this step reported — usually a
+                       reworded message, not a failure">–</span>
+          {% else %}
+          <span class="text-muted/60">○</span>
+          {% endif %}
+        </span>
+        <span>{{ item.label }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {# ── The quick log. Newest first, so the live line never needs scrolling. ─
+       🔴 Open when the job FAILED, not only while it runs. The first draft collapsed it on
+       every terminal state, which meant a failed job rendered as the words "Didn't work" and
+       three grey circles — the reason was on the page but folded away, and the one screen a
+       professor needs to read carefully was the one screen that explained nothing. #}
+    {% if steps %}
+    <details class="group" {% if running or failed or not checklist %}open{% endif %}>
+      <summary class="eyebrow cursor-pointer select-none list-none flex items-center gap-1.5">
+        <span class="group-open:rotate-90 transition-transform inline-block">›</span>
+        Quick log <span class="font-normal normal-case tracking-normal">({{ steps|length }})</span>
+      </summary>
+      <ol class="mt-2 text-xs val space-y-1 max-h-48 overflow-y-auto pr-1">
+        {% for s in steps | reverse %}
+        <li class="flex gap-2 {% if 'ERROR' in s.msg or 'REFUSED' in s.msg %}text-ink font-semibold{% else %}text-muted{% endif %}
+                   {% if loop.first %}log-new{% endif %}">
+          <span style="opacity:.5" class="shrink-0">{{ s.t }}</span>
+          <span>{{ s.msg }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+    </details>
+    {% elif running %}
+    <p class="text-xs text-muted val">starting the browser…</p>
+    {% endif %}
+
+    {# The error, when it is not already the last thing in the log. #}
+    {% if r.error and not (steps and r.error in steps[-1].msg) %}
+    <p class="text-sm text-ink mt-3 whitespace-pre-line">{{ r.error }}</p>
+    {% endif %}
+
+    {# ── The honest expectation, in words. ───────────────────────────────────── #}
+    {% if running and duration %}
+    <p class="text-xs text-muted mt-3.5 pt-3 border-t border-line">{{ duration }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── The pre-flight verdict: what a restore is about to destroy ───────────── #}
+  {% if kind == 'restore_check' and job.status == 'done' and pf %}
+  <div class="border-t border-line">
+    <div class="px-5 py-3 text-xs leading-relaxed" style="background:#FEF3C7;color:#78350F">
+      <strong>Read this before continuing.</strong>
+      Restoring replaces everything in <strong>{{ pf.target_name }}</strong>.
+      {% if pf.target_activities %}
+      Its <strong>{{ pf.target_activities }} activities</strong>
+      across {{ pf.target_sections }} sections will be <strong>deleted</strong> first.
+      {% else %}
+      It is currently empty, so nothing is lost.
+      {% endif %}
+      Enrolled students stay enrolled; their submissions and grades do not.
+    </div>
+    <dl class="grid grid-cols-2 gap-px text-xs" style="background:var(--line)">
+      <div class="bg-white px-5 py-3">
+        <dt class="text-muted">Restoring</dt>
+        <dd class="text-ink font-medium">{{ r.archive.fullname }}</dd>
+        <dd class="text-muted">{{ r.archive.activities }} activities · {{ r.archive.mb }} MB</dd>
+      </div>
+      <div class="bg-white px-5 py-3">
+        <dt class="text-muted">Into</dt>
+        <dd class="text-ink font-medium">{{ pf.target_name }}</dd>
+        <dd class="text-muted val">idc {{ pf.idc }}</dd>
+      </div>
+    </dl>
+
+    <form hx-post="{{ r.confirm_url }}" hx-target="#transfer-work" hx-swap="innerHTML"
+          class="px-5 py-4 flex flex-wrap items-center gap-3 border-t border-line">
+      <input type="hidden" name="archive_path" value="{{ r.archive_path }}" />
+      <input type="hidden" name="preflight_job" value="{{ job.id }}" />
+      {% if pf.grades_held %}
+      {# 🔴 The gradebook guard. MUSAI holds grades for this course; a restore wipes them. #}
+      <label class="flex items-center gap-2 text-xs text-ink w-full">
+        <input type="checkbox" name="force" value="1" required class="rounded border-line" />
+        MUSAI holds <strong>{{ pf.grades_held }} grades</strong> for this course.
+        I have re-fetched them or accept losing them.
+      </label>
+      {% endif %}
+      <button type="submit" class="btn btn-danger">
+        Replace {{ pf.target_activities }} activities — restore now
+      </button>
+      <span class="text-[11px] text-muted">
+        About fifteen minutes for a 50 MB backup. You can close this tab.
+      </span>
+    </form>
+  </div>
+  {% endif %}
+
+  {# ── Terminal extras ──────────────────────────────────────────────────────── #}
+  {% if not running and not refused and not job.stale %}
+  {% set has_extras = r.download or r.course_url or (kind == 'course_restore' and job.status == 'done')
+                      or (kind == 'map_courses' and job.status == 'done' and r.created) %}
+  {% if has_extras %}
+  <div class="px-5 py-4 border-t border-line flex flex-wrap gap-3 items-center text-xs">
+    {% if r.download %}
+    <a href="{{ r.download }}" class="btn btn-accent">Download the .mbz</a>
+    {% endif %}
+    {% if r.file %}
+    <span class="text-muted val">{{ (r.bytes / 1048576) | round(1) }} MB</span>
+    {% endif %}
+    {% if r.manifest and r.manifest.activities %}
+    <span class="text-muted">{{ r.manifest.activities }} activities ·
+      users={{ 'YES' if r.manifest.includes_users else 'no' }}</span>
+    {% endif %}
+    {% if r.course_url %}
+    <a href="{{ r.course_url }}" target="_blank" rel="noopener"
+       class="font-semibold" style="color:var(--accent-deep)">Open the course in Moodle ↗</a>
+    {% endif %}
+    {% if kind == 'map_courses' and job.status == 'done' and r.created %}
+    <a href="/" class="btn btn-accent">See my courses</a>
+    {% endif %}
+    {% if kind == 'course_restore' and job.status == 'done' %}
+    {# 🔴 restore.py's own post-restore count is unreliable — it reported 0 for two of three
+       restores that had each placed 79 activities. The page must not present it as the truth. #}
+    <p class="w-full text-[11px] text-muted mt-1 leading-relaxed">
+      MUSAI counted <strong>{{ r.modules }}</strong> activities from the session that ran the
+      restore. <strong>That count has been wrong before</strong> — open the course and look
+      rather than re-running if it seems low.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+<style>
+  /* The animation budget, spent on the two things that are genuinely happening: the current
+     step, and a line arriving in the log. Nothing here implies progress MUSAI cannot see. */
+  .tick-current { display:inline-block; animation: nudge 1.4s ease-in-out infinite; }
+  @keyframes nudge { 0%,100% { transform: translateX(0); opacity:1 }
+                     50% { transform: translateX(2px); opacity:.55 } }
+  .log-new { animation: rise .28s ease-out; }
+  @keyframes rise { from { opacity:0; transform: translateY(-3px) } to { opacity:1 } }
+</style>

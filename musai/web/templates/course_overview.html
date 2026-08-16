@@ -1,0 +1,115 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'overview' %}
+{% set tab_title = 'Overview' %}
+{% block feature %}courses{% endblock %}
+
+{% block course_content %}
+
+{#
+  What MUSAI holds about this course, and what it is missing.
+
+  The order is deliberate: the numbers first, then **the one thing to do next**. A dashboard
+  that lists five equally-weighted options is a dashboard nobody acts on, and a professor
+  opening a course at 7am has one question — "what do I still have to do here?"
+#}
+
+{#
+  🔴 The Students tile used to read "enrolled in MUSAI" with no date and no link. 1-LED-A showed
+  10 while the live course held 30-something, and nothing on screen could have said the number was
+  two months old — MUSAI's enrolment comes only from a gradebook export (`grading/ingest.py`),
+  never from the participants page. It now carries its own age and links to where it is refreshed.
+#}
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-7">
+  {% for label, value, note, href in [
+      ('Activities', n_activities, (n_unmapped ~ ' unassigned') if n_unmapped else 'all assigned',
+       '/courses/' ~ course.id ~ '/activities'),
+      ('Partials', n_partials, 'grading scheme', '/courses/' ~ course.id ~ '/grades'),
+      ('Students', students,
+       ('as of ' ~ gradebook_ingested_label) if gradebook_state == 'dated'
+         else ('date unknown' if gradebook_state == 'undated' else 'never imported'),
+       '/courses/' ~ course.id ~ '/grades'),
+      ('Grades computed', n_graded, 'partial grades stored', '/courses/' ~ course.id ~ '/grades'),
+  ] %}
+  {% if href %}<a href="{{ href }}" class="card p-4 block hover:border-line transition">
+  {% else %}<div class="card p-4">{% endif %}
+    <p class="eyebrow">{{ label }}</p>
+    <p class="font-serif text-3xl font-semibold text-ink mt-1 leading-none">{{ value }}</p>
+    <p class="text-xs text-muted mt-1.5">
+      {{ note }}
+      {# The one warning on this row. A stale student count is the number most likely to be
+         acted on while wrong — it decides who a message reaches. #}
+      {% if label == 'Students' and gradebook_stale %}
+      <span class="ml-0.5" style="color:var(--danger)" title="{{ gradebook_age_days }} days old">⚠</span>
+      {% endif %}
+    </p>
+  {% if href %}</a>{% else %}</div>{% endif %}
+  {% endfor %}
+</div>
+
+{# ── What to do next. ONE suggestion, chosen in `routes_course.next_step()`. ───
+   Deliberately not a list of five things: a screen that weights every option equally is a
+   screen nobody acts on, and the steps genuinely depend on each other in order. #}
+{% if next_step %}
+<div class="card p-5 mb-7 border-l-4" style="border-left-color:var(--accent)">
+  <p class="eyebrow">Next</p>
+  <h2 class="font-serif text-xl font-semibold text-ink mt-1">{{ next_step.title }}</h2>
+  <p class="text-sm text-muted mt-1.5 leading-relaxed max-w-2xl">{{ next_step.body }}</p>
+  <a href="{{ next_step.href }}" class="btn btn-accent mt-4">{{ next_step.label }}</a>
+</div>
+{% else %}
+<div class="card p-5 mb-7 border-l-4" style="border-left-color:var(--accent)">
+  <p class="eyebrow">Ready</p>
+  <h2 class="font-serif text-xl font-semibold text-ink mt-1">
+    Everything MUSAI needs for {{ course.group_code }} is in place
+  </h2>
+  <p class="text-sm text-muted mt-1.5 leading-relaxed max-w-2xl">
+    {{ n_activities }} activities across {{ n_partials }} partials, all assigned. The other tabs
+    read from this.
+  </p>
+</div>
+{% endif %}
+
+{# ── The partials, as a compact table rather than a row of cards. ──────────── #}
+{% if partials %}
+<h2 class="eyebrow mb-3">Grading scheme</h2>
+<div class="card overflow-hidden mb-7">
+  <table class="w-full text-sm">
+    <thead class="border-b border-line text-muted text-left">
+      <tr>
+        <th class="px-5 py-2.5 font-semibold">Partial</th>
+        <th class="px-5 py-2.5 font-semibold">SEGA</th>
+        <th class="px-5 py-2.5 font-semibold text-right">Weights (gen / esp / ex)</th>
+        <th class="px-5 py-2.5 font-semibold text-right">Activities</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {% for p in partials %}
+      <tr class="hover:bg-paper/60">
+        <td class="px-5 py-2.5">
+          <a href="/courses/{{ course.id }}/partial/{{ p.id }}"
+             class="font-semibold text-ink hover:underline">{{ p.name }}</a>
+        </td>
+        <td class="px-5 py-2.5 val text-muted">{{ p.sega_evaluacion }}</td>
+        <td class="px-5 py-2.5 text-right val text-muted">
+          {{ (p.weight_general * 100) | round | int }} /
+          {{ (p.weight_special * 100) | round | int }} /
+          {{ (p.weight_exam * 100) | round | int }}
+        </td>
+        <td class="px-5 py-2.5 text-right text-muted">
+          {{ activities | selectattr('partial_id', 'equalto', p.id) | list | length }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2 class="eyebrow mb-3">Also here</h2>
+<div class="flex flex-wrap gap-2">
+  <a href="/courses/{{ course.id }}/export.xlsx" class="btn btn-ghost">
+    Evidence sheet (.xlsx)
+  </a>
+  <a href="/courses/{{ course.id }}/build" class="btn btn-ghost">Course Builder</a>
+</div>
+{% endblock %}

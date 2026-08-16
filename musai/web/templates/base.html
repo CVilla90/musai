@@ -1,0 +1,290 @@
+{#
+  The shell every signed-in page lives in.
+
+  ── The accent system ───────────────────────────────────────────────────────────────────────
+  A page declares which feature it belongs to with `{% block feature %}dates{% endblock %}`, and
+  that lands on `<body data-feature="dates">`. Every accent-coloured thing on the page —
+  buttons, the current tab, focus rings, chips — reads `var(--accent)`, so **one attribute
+  re-colours the whole screen**. Adding a feature is one CSS block, not a class rename across
+  nine templates.
+
+  This is why the accents are CSS custom properties and not Tailwind colour keys: a Tailwind
+  key has to be spelled out at every call site (`text-clay-700`, `bg-clay/10`, `border-clay/20`),
+  which means a component can only ever belong to the feature it was written for. The old
+  `clay`/`sage` keys are kept below for templates not yet converted; they are aliases of the
+  indigo/teal values and nothing new should use them.
+
+  🔴 Danger red is NOT in the accent rotation. It is a separate variable that never changes, so
+  a red button always means the same thing — see DESIGN_DIRECTION §2.1.
+#}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}MUSAI{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.3/dist/htmx.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            paper:   "#FBF9F4",
+            surface: "#FFFFFF",
+            line:    "#EDE8DE",
+            ink:     { DEFAULT: "#26242E", soft: "#55535E" },
+            // 4.67:1 on paper, 4.91:1 on a card. Was #8B8992 = 3.28:1, which
+            // fails WCAG AA and is the colour of every label in the cockpit.
+            muted:   "#726F7B",
+            // Legacy aliases — see the note at the top of this file. New markup uses
+            // `var(--accent)` through the `.btn-accent` / `.chip` / `.tab` classes.
+            clay:    { DEFAULT: "#4F46E5", 600: "#4338CA", 700: "#3730A3" },
+            sage:    { DEFAULT: "#14B8A6", 600: "#0F766E" },
+          },
+          fontFamily: {
+            sans:  ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+            serif: ["Fraunces", "ui-serif", "Georgia", "serif"],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    :root {
+      --paper:#FBF9F4; --surface:#FFFFFF; --line:#EDE8DE; --line-soft:#F5F1E9;
+      --ink:#26242E; --ink-soft:#55535E; --muted:#726F7B;
+      /* The default accent is the cockpit's. Every `[data-feature]` below overrides it. */
+      --accent:#4F46E5; --accent-deep:#4338CA; --accent-tint:#EEF0FF;
+      /* Fixed, never rotated. A red control destroys something — nothing else may borrow it. */
+      --danger:#B91C1C; --danger-deep:#991B1B; --danger-tint:#FDECEC;
+      --radius:0.85rem;
+      --shadow:0 1px 2px rgba(35,35,50,.04), 0 12px 30px -18px rgba(35,35,55,.20);
+    }
+    [data-feature="activities"]{ --accent:#0F766E; --accent-deep:#0B5A54; --accent-tint:#E3F5F1; }
+    [data-feature="dates"]     { --accent:#7C3AED; --accent-deep:#6428CE; --accent-tint:#F3EEFE; }
+    [data-feature="grades"]    { --accent:#4D7C4A; --accent-deep:#3C6339; --accent-tint:#E9F2E6; }
+    [data-feature="content"]   { --accent:#B45309; --accent-deep:#92400E; --accent-tint:#FBF0DE; }
+    [data-feature="transfer"]  { --accent:#C2703D; --accent-deep:#9C5730; --accent-tint:#FBEFE4; }
+    [data-feature="messages"]  { --accent:#9D4E6C; --accent-deep:#7E3D56; --accent-tint:#FAEDF2; }
+
+    body { -webkit-font-smoothing: antialiased; background: var(--paper); color: var(--ink); }
+    ::selection { background: var(--accent-tint); }
+
+    /* ── surfaces ─────────────────────────────────────────────────────────── */
+    .card { background: var(--surface); border: 1px solid var(--line);
+            border-radius: var(--radius); box-shadow: var(--shadow); }
+    .card-flat { background: var(--surface); border: 1px solid var(--line);
+                 border-radius: var(--radius); }
+
+    /* ── controls ─────────────────────────────────────────────────────────── */
+    .btn { display:inline-flex; align-items:center; gap:.4rem; font-weight:600; font-size:.82rem;
+           padding:.5rem .9rem; border-radius:.65rem; transition:background .15s, border-color .15s,
+           color .15s, transform .1s; cursor:pointer; border:1px solid transparent;
+           line-height:1.2; }
+    .btn:active { transform: translateY(.5px); }
+    /* 🔴 `--accent-deep`, not `--accent`. White on the clay accent (#C2703D) measures
+       3.70:1 — a WCAG AA failure on the "Create a backup" button, which is the single
+       control this whole release exists to put in front of a professor. Using the deep ink
+       for every filled button lifts the worst case to 5.50:1 and every other feature above
+       6.9:1, and it costs one line rather than a per-feature exception nobody will maintain.
+       The lighter `--accent` stays for the tab underline and the dots, which are graphics
+       and hold to the 3:1 non-text bar. */
+    .btn-accent { background: var(--accent-deep); color:#fff; }
+    .btn-accent:hover { background: color-mix(in srgb, var(--accent-deep) 86%, #000); }
+    .btn-ghost { background: var(--surface); color: var(--ink-soft); border-color: var(--line); }
+    .btn-ghost:hover { border-color:#DCD6C8; background:#FDFCF9; color: var(--ink); }
+    .btn-quiet { background: transparent; color: var(--muted); }
+    .btn-quiet:hover { color: var(--ink); background: var(--line-soft); }
+    .btn-danger { background: var(--danger); color:#fff; }
+    .btn-danger:hover { background: var(--danger-deep); }
+    .btn[disabled], .btn[aria-disabled="true"] { opacity:.45; cursor:not-allowed; }
+    .btn-clay { background: var(--accent-deep); color:#fff; }     /* legacy alias */
+    .btn-clay:hover { background: color-mix(in srgb, var(--accent-deep) 86%, #000); }
+
+    /* A visible keyboard focus ring everywhere, in the page's own accent. */
+    a:focus-visible, button:focus-visible, select:focus-visible,
+    input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px; border-radius: .4rem;
+    }
+
+    /* ── small type objects ───────────────────────────────────────────────── */
+    .chip { display:inline-flex; align-items:center; gap:.35rem; font-size:.7rem;
+            font-weight:600; padding:.2rem .55rem; border-radius:999px;
+            background: var(--accent-tint); color: var(--accent-deep);
+            border:1px solid color-mix(in srgb, var(--accent) 18%, transparent); }
+    .chip-quiet { background: var(--line-soft); color: var(--muted); border-color: var(--line); }
+    /* Anything Moodle owns — an idc, a cmid, a filename — renders as a value, not as prose. */
+    .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.75rem;
+           letter-spacing:-.01em; }
+    .eyebrow { font-size:.68rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+               color: var(--muted); }
+
+    .grade-pill { display:inline-flex; align-items:center; justify-content:center;
+                  min-width:2.6rem; padding:.15rem .5rem; border-radius:.5rem;
+                  font-variant-numeric: tabular-nums; font-weight:600; font-size:.8rem; }
+
+    /* ── the course tab strip (course_base.html) ──────────────────────────── */
+    .tabs { display:flex; gap:.15rem; overflow-x:auto; scrollbar-width:none;
+            border-bottom:1px solid var(--line); }
+    .tabs::-webkit-scrollbar { display:none; }
+    .tab { position:relative; white-space:nowrap; padding:.6rem .8rem .7rem;
+           font-size:.82rem; font-weight:600; color: var(--muted);
+           border-bottom:2px solid transparent; margin-bottom:-1px;
+           transition:color .15s, border-color .15s; }
+    .tab:hover { color: var(--ink); }
+    /* The current tab is coloured by the page's OWN feature accent — that is what the accent
+       palette is for: knowing where you are before reading the heading. */
+    .tab[aria-current="page"] { color: var(--accent-deep); border-bottom-color: var(--accent); }
+    .tab-dot { display:inline-block; width:.4rem; height:.4rem; border-radius:999px;
+               background: var(--accent); margin-left:.3rem; vertical-align:middle; }
+
+    /* ── motion ───────────────────────────────────────────────────────────── */
+    .spin { width:1.05rem; height:1.05rem; border:2px solid var(--line);
+            border-top-color: var(--accent); border-radius:50%;
+            animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loader { backdrop-filter: blur(3px); background: rgba(251,249,244,.74); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration:.001ms !important; animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+      }
+    }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body data-feature="{% block feature %}courses{% endblock %}" class="font-sans min-h-screen">
+
+  {# ── Level 1 nav: where in MUSAI am I? ───────────────────────────────────── #}
+  <nav class="sticky top-0 z-40 bg-paper/85 backdrop-blur border-b border-line px-6 py-3
+              flex items-center gap-1">
+    <a href="/" class="flex items-baseline gap-2 mr-4">
+      <span class="font-serif font-semibold text-xl tracking-tight text-ink">MUSAI</span>
+      <span class="text-[11px] text-muted hidden sm:inline">Moodle&nbsp;·&nbsp;UACH&nbsp;·&nbsp;AI</span>
+    </a>
+    {% set nav = nav_section | default('courses') %}
+    {% for key, label, href in [('courses', 'Courses', '/'), ('analyst', 'Analyst', '/assistant'),
+                                ('settings', 'Settings', '/settings')] %}
+    <a href="{{ href }}"
+       class="text-sm px-2.5 py-1.5 rounded-lg transition
+              {% if nav == key %}text-ink font-semibold bg-white border border-line
+              {% else %}text-muted hover:text-ink{% endif %}">{{ label }}</a>
+    {% endfor %}
+
+    {# 🔴 Fixed colours, deliberately outside the accent rotation.
+       This badge answers one question — *can anything I click right now reach Moodle?* — and
+       the answer does not depend on which tab is open. Painted in `var(--accent)` it changed
+       hue on every tab, so the same state looked like six different states and the badge
+       stopped being readable at a glance. A safety indicator has to look identical everywhere
+       or it is decoration. #}
+    {% if dry_run %}
+    <span class="ml-auto chip" style="background:#F2F0E9;color:#55535E;border-color:#E4E0D5"
+          title="No write reaches Moodle or SEGA while this is on.">
+      <span class="w-1.5 h-1.5 rounded-full" style="background:#4D7C4A"></span>
+      DRY-RUN · no writes
+    </span>
+    {% else %}
+    <span class="ml-auto chip" style="background:#FDECEC;color:#B91C1C;border-color:#F5C6C6">
+      <span class="w-1.5 h-1.5 rounded-full" style="background:#B91C1C"></span>
+      LIVE · writes enabled
+    </span>
+    {% endif %}
+
+    {# Who is acting. The AuditLog records this email, so the page must show it — a cockpit
+       that can act on a live course must never leave "as whom?" ambiguous. #}
+    {% set me = current_user(request) %}
+    {% if me %}
+    <div class="flex items-center gap-2 pl-2">
+      {% if me.picture %}
+      <img src="{{ me.picture }}" alt="" referrerpolicy="no-referrer"
+           class="w-7 h-7 rounded-full border border-line object-cover" />
+      {% else %}
+      <span class="w-7 h-7 rounded-full border border-line text-[11px] font-semibold
+                   flex items-center justify-center"
+            style="background:var(--accent-tint);color:var(--accent-deep)">
+        {{ me.email[0]|upper }}
+      </span>
+      {% endif %}
+      <span class="text-xs text-muted hidden md:inline" title="{{ me.email }}">{{ me.email }}</span>
+      <a href="/auth/logout" class="text-xs text-muted hover:text-ink border-l border-line pl-2">
+        Sign out
+      </a>
+    </div>
+    {% endif %}
+  </nav>
+
+  <main class="max-w-6xl mx-auto px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  {# ── The full-page loader ────────────────────────────────────────────────
+     For short synchronous posts only. Anything that drives a browser uses the real
+     background-job component (`work_progress.html`), which shows steps Moodle actually
+     reached.
+
+     🔴 This used to fabricate a step log from `setTimeout` — lines like "Signing in…" that
+     appeared on a schedule whether or not anything had happened. Removed 2026-08-14: it is
+     the exact instrument DESIGN_DIRECTION §4.2 rule 1 forbids, and this project has been
+     bitten three times by readouts that reported confidently about something they were not
+     measuring. What is left is a label the page chose and a clock that is genuinely real. #}
+  <div id="loader" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+    <div class="card px-6 py-5 w-[21rem] max-w-[90vw]">
+      <div class="flex items-center gap-3">
+        <span class="spin"></span>
+        <span id="loader-msg" class="text-sm font-semibold text-ink">Working…</span>
+      </div>
+      <p id="loader-elapsed" class="text-xs text-muted val mt-3"></p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const loader = document.getElementById("loader");
+      const msg = document.getElementById("loader-msg");
+      const elapsedEl = document.getElementById("loader-elapsed");
+      let elapsedTimer = null, startedAt = 0;
+
+      function hideLoader() {
+        loader.classList.add("hidden");
+        if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+      }
+
+      function showLoader(label) {
+        startedAt = Date.now();
+        msg.textContent = label && label !== "true" ? label : "Working…";
+        elapsedEl.textContent = "0s";
+        loader.classList.remove("hidden");
+        // The only number on this card, and it measures the one thing the browser can
+        // actually see: how long you have been waiting.
+        elapsedTimer = setInterval(() => {
+          const s = Math.round((Date.now() - startedAt) / 1000);
+          elapsedEl.textContent = s + "s" + (s > 25 ? " — browser jobs can take a minute" : "");
+        }, 500);
+      }
+
+      window.addEventListener("pageshow", hideLoader);
+
+      // Delegated, so forms swapped in LATER by htmx are covered too.
+      document.body.addEventListener("htmx:beforeRequest", (e) => {
+        const f = e.target.closest ? e.target.closest("[data-loading]") : null;
+        if (!f) return;
+        showLoader(f.getAttribute("data-loading"));
+      });
+      // Hide on EVERY terminal outcome. Missing one is how a modal gets stuck.
+      ["htmx:afterOnLoad", "htmx:afterSwap", "htmx:responseError", "htmx:sendError",
+       "htmx:timeout", "htmx:afterRequest", "htmx:swapError", "htmx:abort"]
+        .forEach((evt) => document.body.addEventListener(evt, hideLoader));
+
+      // Escape hatches — a stuck overlay must never trap the professor.
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideLoader(); });
+      loader.addEventListener("click", (e) => { if (e.target === loader) hideLoader(); });
+    })();
+  </script>
+  {% block body_extra %}{% endblock %}
+</body>
+</html>

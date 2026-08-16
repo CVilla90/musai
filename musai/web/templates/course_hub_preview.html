@@ -1,0 +1,50 @@
+{% if saved %}
+<div class="mb-3 text-xs font-semibold text-sage-600">✓ Guardado</div>
+{% endif %}
+
+{% if warnings %}
+<div class="card p-4 mb-4 border-l-4" style="border-left-color:#F59E0B">
+  <p class="text-xs font-semibold text-ink mb-1.5">Revisa esto (no impide guardar):</p>
+  <ul class="text-xs text-muted space-y-1 list-disc ml-4">
+    {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card overflow-hidden">
+  <div class="px-5 py-3 border-b border-line text-xs text-muted">
+    Así se va a ver en Moodle — arriba de todo, en la primera sección del curso.
+  </div>
+
+  <div style="background:#ffffff;padding:22px">
+    {{ html|safe }}
+  </div>
+
+  <div class="px-5 py-3.5 border-t border-line flex flex-wrap items-center gap-3">
+    <form hx-post="/courses/{{ course.id }}/hub/publish" hx-target="#hub-preview" hx-swap="innerHTML">
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="submit" class="btn px-5 py-2 rounded-lg text-sm font-semibold text-white"
+                style="background:#14B8A6">Publicar en Moodle</button>
+        <label class="flex items-center gap-2 text-xs text-ink cursor-pointer"
+               title="Sin esto, el trabajo llena el formulario de Moodle y toma una captura, pero no guarda">
+          <input type="checkbox" name="live" value="1" class="rounded border-line">
+          <span>Publicar de verdad <span class="text-muted">(si no, es un ensayo)</span></span>
+        </label>
+        {# The second key. Separate from "live" on purpose: going live and DESTROYING a page
+           somebody wrote by hand are two different decisions, and one checkbox cannot ask
+           two questions. An ensayo ignores this and previews regardless. #}
+        <label class="flex items-center gap-2 text-xs cursor-pointer"
+               style="color:#9F1239"
+               title="La portada actual se guarda en backups/ antes de reemplazarse">
+          <input type="checkbox" name="overwrite" value="1" class="rounded border-line">
+          <span>Reemplazar una portada que <strong>no</strong> hizo MUSAI</span>
+        </label>
+      </div>
+    </form>
+    <span class="text-xs text-muted">
+      Se publica como <strong>portada de la sección</strong> (la descripción de la sección 0),
+      no como una etiqueta — es la página de inicio del curso.
+      Publicar otra vez <strong>reemplaza</strong> esta misma portada; nunca crea una segunda.
+    </span>
+  </div>
+</div>

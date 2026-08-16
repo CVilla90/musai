@@ -1,0 +1,85 @@
+{#
+  A messaging job in flight, and its result.
+
+  Separate from `job_progress.html` because the thing worth showing here is different: not
+  "how many were written" but **who it reached, and who it deliberately did not**. Moodle's
+  own screens never show that, so if this template does not, nothing does.
+
+  Polls its own endpoint and stops the moment the job is terminal.
+#}
+{% set r = job.result or {} %}
+{% set running = job.status in ("pending", "running") %}
+
+<div class="card p-5 border-l-4"
+     style="border-left-color:{% if job.status == 'done' %}#14B8A6{% elif job.status == 'failed' %}#F43F5E{% else %}#F59E0B{% endif %}"
+     {% if running and job_id %}
+       hx-get="/messaging-jobs/{{ job_id }}" hx-trigger="every 1s" hx-swap="outerHTML"
+     {% endif %}>
+
+  <div class="flex items-center gap-3 mb-3">
+    {% if running %}<span class="spin"></span>{% endif %}
+    <span class="text-sm font-semibold text-ink">
+      {% if job.status == 'pending' %}En cola…
+      {% elif job.status == 'running' %}Hablando con Moodle…
+      {% elif job.status == 'done' %}
+        {% if r.dry_run %}Simulacro completo — no se envió nada
+        {% else %}Enviado ✅{% endif %}
+      {% else %}
+        {% if r.refused %}Rechazado — no se envió nada{% else %}Falló{% endif %}
+      {% endif %}
+    </span>
+    {% if r.only_me %}
+    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+          style="background:#FEF3C7;color:#78350F">sólo a mí</span>
+    {% endif %}
+  </div>
+
+  {% if r.steps %}
+  <ol class="text-xs font-mono space-y-1">
+    {% for s in r.steps %}
+    <li class="{% if 'ERROR' in s.msg or 'RECHAZADO' in s.msg %}text-ink{% else %}text-muted{% endif %}">
+      <span style="opacity:.55">{{ s.t }}</span>
+      <span class="ml-2">
+        {%- if 'ERROR' in s.msg or 'RECHAZADO' in s.msg %}✗
+        {%- elif running and loop.last %}▸{% else %}✓{% endif %} {{ s.msg }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+  {% if r.error %}
+  <p class="text-sm text-ink mt-3">{{ r.error }}</p>
+  {% endif %}
+
+  {% if not running and r.recipients %}
+  <div class="mt-4 border-t border-line pt-3">
+    <p class="text-xs font-semibold text-ink mb-2">
+      {{ r.recipients|length }} destinatario(s){% if r.moodle_count %}
+      · Moodle confirmó {{ r.moodle_count }}{% endif %}
+    </p>
+    <div class="flex flex-wrap gap-1.5 text-xs">
+      {% for p in r.recipients %}
+      <span class="rounded px-2 py-0.5" style="background:#ECFDF5;color:#065F46">
+        {{ (p.full_name or p.moodle_user_id)|title }}</span>
+      {% endfor %}
+    </div>
+    {% if r.excluded %}
+    <p class="text-xs text-muted mt-3 mb-1">No se les escribió:</p>
+    <div class="flex flex-wrap gap-1.5 text-xs">
+      {% for p in r.excluded %}
+      <span class="rounded px-2 py-0.5" style="background:#F1F5F9;color:#64748B"
+            title="{{ p.excluded_reason }}">
+        {{ (p.full_name or p.moodle_user_id)|title }} · {{ p.excluded_reason }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if not running and r.dry_run and r.ok %}
+  <p class="text-xs text-muted mt-3">
+    Se llegó hasta la vista previa de Moodle y se abandonó ahí. Para enviar de verdad,
+    escribe el código del grupo.
+  </p>
+  {% endif %}
+</div>

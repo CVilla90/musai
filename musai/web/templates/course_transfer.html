@@ -1,0 +1,153 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'transfer' %}
+{% set tab_title = 'Backup & restore' %}
+{% block feature %}transfer{% endblock %}
+
+{% block course_content %}
+
+{% if error %}
+<div class="card p-4 mb-5 text-sm border-l-4 whitespace-pre-line"
+     style="border-left-color:var(--danger)">{{ error }}</div>
+{% endif %}
+{% if notice %}
+<div class="card p-4 mb-5 text-sm border-l-4" style="border-left-color:var(--accent)">{{ notice }}</div>
+{% endif %}
+
+<div class="grid gap-5 lg:grid-cols-2 items-start">
+
+  {# ── Backup: additive and fast, but still confirmed ───────────────────────── #}
+  <div class="card p-5">
+    <p class="eyebrow">Safe · additive</p>
+    <h2 class="font-serif text-xl font-semibold text-ink mt-1">Back this course up</h2>
+    <p class="text-sm text-muted mt-1.5 leading-relaxed">
+      Creates a <span class="val">.mbz</span> archive of {{ course.group_code }} and brings it
+      here to download. It <strong>adds</strong> a file to your Moodle backup area and changes
+      nothing in the course.
+    </p>
+    <p class="text-xs text-muted mt-2">Usually under a minute.</p>
+
+    {#
+      Two steps, on the owner's instruction (2026-08-14). A backup is additive and needs no rail —
+      but it does sign in to Moodle as you, queue a job on UACH's server and leave an archive in
+      your private backup area, and it is not free on a 60 MB course. The old single button fired
+      all of that on one click with nothing naming the course it was about to open.
+
+      ⚠️ A `<details>` disclosure, not a `confirm()` dialog: a JS modal blocks the page (and this
+      project drives the browser under automation, where a modal stops everything). It also keeps
+      the confirmation READABLE — the point is to state which course and what happens, which a
+      one-line dialog cannot do. No JS, so it cannot fail to open.
+    #}
+    <details class="mt-4 group">
+      <summary class="btn btn-accent cursor-pointer inline-flex list-none">
+        Create a backup
+      </summary>
+      <div class="mt-3 rounded-xl px-4 py-3 text-xs leading-relaxed border border-line"
+           style="background:var(--accent-tint)">
+        <p class="text-ink">
+          <strong>This will sign in to Moodle as you</strong> and back up
+          <strong>{{ course.group_code }}</strong> <span class="val">(idc {{ course.moodle_course_id }})</span>.
+        </p>
+        <ul class="mt-2 space-y-1 text-muted">
+          <li>· Nothing in the course is changed, hidden or deleted.</li>
+          <li>· An archive is added to <strong>your</strong> Moodle private backup area.</li>
+          <li>· A copy is downloaded here, and it contains your course content
+                {% if course.level %}— quiz questions and answers included{% endif %}.</li>
+        </ul>
+      </div>
+      <button class="btn btn-accent mt-3" hx-post="/courses/{{ course.id }}/backup"
+              hx-target="#transfer-work" hx-swap="innerHTML">
+        Yes — back up {{ course.group_code }} now
+      </button>
+    </details>
+
+    {% if last_backup %}
+    <div class="mt-4 pt-4 border-t border-line text-xs">
+      <p class="text-muted mb-1">Most recent archive on this machine</p>
+      <p class="text-ink font-medium">{{ last_backup.fullname or last_backup.name }}</p>
+      <p class="text-muted">
+        {{ last_backup.activities }} activities · {{ last_backup.mb }} MB ·
+        {% if last_backup.includes_users %}
+        <span style="color:var(--danger)">carries user data</span>
+        {% else %}no user data{% endif %}
+      </p>
+      <a href="/courses/{{ course.id }}/backup/download"
+         class="inline-block mt-2 font-semibold" style="color:var(--accent-deep)">Download it →</a>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Restore: destructive. Everything here leads through the safety check. ── #}
+  <div class="card p-5 border-l-4" style="border-left-color:var(--danger)">
+    <p class="eyebrow" style="color:var(--danger)">Destructive</p>
+    <h2 class="font-serif text-xl font-semibold text-ink mt-1">Restore a backup into it</h2>
+    <p class="text-sm text-muted mt-1.5 leading-relaxed">
+      Uploads a <span class="val">.mbz</span> and restores it into
+      <strong>{{ course.group_code }}</strong>.
+    </p>
+
+    {# 🔴 Said plainly, before the file picker rather than after it. This is Moodle's own
+       wizard behaviour ("Eliminar los contenidos de este curso y después restaurar"), and it
+       is what makes a copy behave like a copy. #}
+    <div class="mt-3 rounded-xl px-4 py-3 text-xs leading-relaxed"
+         style="background:var(--danger-tint);color:#7F1D1D">
+      <strong>This replaces everything in the course.</strong>
+      Activities, pages and the gradebook are deleted first, then the backup is restored over
+      them. <strong>Enrolled students stay enrolled</strong>, but anything they have submitted
+      or been graded on goes with the old contents.
+    </div>
+
+    <form hx-post="/courses/{{ course.id }}/restore/check" hx-encoding="multipart/form-data"
+          hx-target="#transfer-work" hx-swap="innerHTML" class="mt-4">
+      <label class="block">
+        <span class="text-xs text-muted block mb-1">Backup file (.mbz, up to {{ max_mb }} MB)</span>
+        <input type="file" name="archive" accept=".mbz" required
+               class="w-full text-sm text-ink file:mr-3 file:py-2 file:px-3 file:rounded-lg
+                      file:border file:border-line file:text-xs file:font-semibold
+                      file:bg-white file:text-ink" />
+      </label>
+      <button type="submit" class="btn btn-ghost mt-3">
+        Check what this would do
+      </button>
+      <p class="text-[11px] text-muted mt-2">
+        Nothing is restored yet. MUSAI reads the file, opens the course and tells you exactly
+        what would be replaced — about thirty seconds. You confirm after that.
+      </p>
+    </form>
+  </div>
+</div>
+
+{# The single place every job in this page renders. One target, so a backup started after a
+   restore check replaces it rather than stacking two live pollers on the page. #}
+<div id="transfer-work" class="mt-6"></div>
+
+<div class="mt-8">
+  <h2 class="eyebrow mb-3">Recent jobs</h2>
+  {% if recent %}
+  <div class="card overflow-hidden">
+    <table class="w-full text-xs">
+      <tbody class="divide-y divide-line">
+        {% for j in recent %}
+        <tr>
+          <td class="px-4 py-2.5 val text-muted">{{ j.created_at.strftime('%d %b %H:%M') }}</td>
+          <td class="px-4 py-2.5 text-ink">{{ j.kind.replace('_', ' ') }}</td>
+          <td class="px-4 py-2.5 text-muted">{{ j.params.group or j.params.semester or '' }}</td>
+          <td class="px-4 py-2.5">
+            <span class="px-2 py-0.5 rounded-full text-[11px]"
+                  style="background:{% if j.status == 'done' %}#E0F5F1;color:#0F766E{% elif j.status == 'failed' %}var(--danger-tint);color:var(--danger-deep){% else %}#FBF1E1;color:#78350F{% endif %}">
+              {{ 'lost track' if j.stale else j.status }}
+            </span>
+          </td>
+          <td class="px-4 py-2.5 text-right">
+            <button class="btn btn-quiet !py-1 !px-2" hx-get="/work/{{ j.id }}"
+                    hx-target="#transfer-work" hx-swap="innerHTML">view</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-xs text-muted">Nothing yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

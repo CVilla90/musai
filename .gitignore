@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# THIS REPOSITORY IS PUBLIC AND MUST STAY GENERIC AND ANONYMOUS.
+#
+# MUSAI is run against a live university Moodle with real courses, real
+# colleagues and real students. That operational material is what makes the
+# project work and it is exactly what must never be published, so the split is
+# structural rather than editorial:
+#
+#   PUBLIC  — the engine: `musai/`, `tests/`, `alembic/`, this file, README.
+#   PRIVATE — everything that names a person, a live course or a credential:
+#             the working notes, the operational scripts, the data they harvest.
+#
+# Nothing below is deleted from your working copy. These files stay on disk as
+# the local record; they simply never enter the history.
+#
+# ⭐ The rule that produced this file: EXCLUDE THE SURFACE, DON'T REDACT IT.
+# An allow-list of "safe" outputs is only ever as current as the last person who
+# remembered to update it — an audit on 2026-08-16 found two probe dumps sitting
+# in the history with twelve students' full names and matrículas in them,
+# un-ignored by an explicit `!` exception whose comment claimed they contained
+# "no person". Redaction fails quietly and permanently. Exclusion does not.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+*.env
+!.env.example
+# Google OAuth client download. The app reads .env, never this file.
+client_secret_*.json
+
+# ── Working notes ────────────────────────────────────────────────────────────
+# The session log, the per-course worksheets, the runbooks and the product
+# notes. These are the most valuable documents in the project and the least
+# publishable: they name colleagues, quote them, record which of their courses
+# were written to and when, and carry live course identifiers throughout.
+# Every Markdown file is private by default; the public README is the exception.
+*.md
+!README.md
+
+# ── Operational scripts and everything they harvest ──────────────────────────
+# One-shot drivers and probes written against live courses: they carry course
+# ids, professor usernames and group codes in their names alone, and they write
+# rosters, message logs, quiz answer keys and pre-delete dumps beside
+# themselves. The directory is excluded whole — no allow-list, no exceptions.
+scratchpad/
+
+# ── Student and course data ──────────────────────────────────────────────────
+# Moodle backups carry enrolments, submissions and grades inside the .mbz.
+course_backups/
+*.mbz
+# Archives uploaded through the cockpit — same content, arriving from the other
+# direction, and one per professor, so a colleague's course data lands here too.
+uploads/
+# The dev DB holds real rosters, matrículas and partial grades.
+musai_dev.db
+musai_dev.db.bak-*
+*.sqlite
+*.sqlite3
+# Per-run rollback records and section snapshots — the local undo trail.
+backups/
+
+# ── Copyrighted material ─────────────────────────────────────────────────────
+# Textbook scans used to author course content.
+resources/
+*.jpeg
+*.jpg
+
+# ── Python ───────────────────────────────────────────────────────────────────
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Playwright / runtime artifacts ───────────────────────────────────────────
+screenshots/
+*.png
+downloads/
+*.csv
+*.ods
+*.xlsx
+
+# ── OS / editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

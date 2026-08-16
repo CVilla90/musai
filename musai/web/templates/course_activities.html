@@ -1,0 +1,179 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'activities' %}
+{% set tab_title = 'Activities' %}
+{% block feature %}activities{% endblock %}
+
+{% block course_content %}
+
+<div class="flex items-end justify-between gap-4 flex-wrap mb-5">
+  <div>
+    <h2 class="font-serif text-2xl font-semibold text-ink">Activities &amp; mapping</h2>
+    <p class="text-sm text-muted mt-1 max-w-2xl leading-relaxed">
+      Which partial each activity counts towards, and what kind of work it is. Everything the
+      grade engine does starts here — an activity with no partial is left out of every
+      calculation, silently.
+    </p>
+  </div>
+  <div class="flex items-center gap-2">
+    {% if n_unmapped %}<span class="chip">{{ n_unmapped }} unassigned</span>
+    {% elif n_activities %}<span class="chip chip-quiet">all {{ n_activities }} assigned</span>
+    {% endif %}
+    {% if course.moodle_course_id %}
+    <button class="btn btn-ghost" hx-post="/courses/{{ course.id }}/activities/import"
+            hx-target="#activity-work" hx-swap="innerHTML">
+      {% if n_activities %}Re-read from Moodle{% else %}Import from Moodle{% endif %}
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{% if saved %}
+<div class="card p-3.5 mb-5 text-sm border-l-4" style="border-left-color:var(--accent)">
+  Mapping saved.
+</div>
+{% endif %}
+
+<div id="activity-work" class="mb-5"></div>
+
+{% if not partials %}
+{# 🔴 A tab that cannot work says why, in place, instead of rendering an empty table.
+   DESIGN_DIRECTION §3. An empty table looks like "there is nothing here"; this looks like
+   "here is the thing to fix". #}
+<div class="card p-8 text-center">
+  <p class="font-serif text-xl font-semibold text-ink">This course has no partials yet</p>
+  <p class="text-sm text-muted mt-2 max-w-lg mx-auto leading-relaxed">
+    An activity is mapped <em>to a partial</em>, so there is nothing to map to until the
+    course has its grading scheme. That scheme is per course — MUSAI never assumes English's
+    three partials.
+  </p>
+  <a href="/courses/{{ course.id }}/grades" class="btn btn-accent mt-5">See the grading scheme</a>
+</div>
+
+{% elif not activities %}
+<div class="card p-8 text-center">
+  <p class="font-serif text-xl font-semibold text-ink">No activities imported yet</p>
+  <p class="text-sm text-muted mt-2 max-w-lg mx-auto leading-relaxed">
+    MUSAI has this course's name and Moodle id, but not what is inside it. Importing opens each
+    tab once and reads the quizzes, assignments and forums it finds. It writes nothing to the
+    course, and the same read is what the Dates tab needs too.
+  </p>
+  {% if course.moodle_course_id %}
+  <button class="btn btn-accent mt-5" hx-post="/courses/{{ course.id }}/activities/import"
+          hx-target="#activity-work" hx-swap="innerHTML">
+    Import from Moodle
+  </button>
+  <p class="text-[11px] text-muted mt-3">About a minute.</p>
+  {% endif %}
+</div>
+
+{% else %}
+
+{# ── The cascade's verdict, stated before the table it pre-filled. ──────────── #}
+{% if proposal_summary.confident %}
+<div class="card p-4 mb-5 border-l-4" style="border-left-color:var(--accent)">
+  <p class="text-sm text-ink">
+    <strong>{{ proposal_summary.confident }} of {{ proposal_summary.total }} unassigned
+    activities are filled in below as a suggestion.</strong>
+    {% if proposal_summary.memory %}{{ proposal_summary.memory }} from how you mapped the same
+    activity in another course{% endif %}{% if proposal_summary.memory and proposal_summary.structure %};
+    {% endif %}{% if proposal_summary.structure %}{{ proposal_summary.structure }} from which tab
+    it sits in{% endif %}.
+  </p>
+  <p class="text-xs text-muted mt-1.5 leading-relaxed">
+    {# 🔴 Said out loud, because it is the guarantee: nothing is saved until she saves it.
+       A mapping decides how a grade is computed, so it stays a human decision. #}
+    Nothing is saved yet — check them and press <strong>Save mapping</strong>. Activities you
+    have already assigned were not touched.
+  </p>
+</div>
+{% elif proposal_summary.total and not has_snapshot %}
+<div class="card p-4 mb-5 border-l-4" style="border-left-color:var(--accent)">
+  <p class="text-sm text-ink">
+    MUSAI can suggest most of these, but it has not read this course's tabs yet — the tab an
+    activity sits in is how it works out which partial it belongs to.
+  </p>
+  {% if course.moodle_course_id %}
+  <button class="btn btn-accent mt-3" hx-post="/courses/{{ course.id }}/activities/import"
+          hx-target="#activity-work" hx-swap="innerHTML">Read the course</button>
+  {% endif %}
+</div>
+{% endif %}
+
+<form method="post" action="/courses/{{ course.id }}/mapping" data-loading="Saving the mapping…">
+  <div class="card overflow-hidden mb-4">
+    <table class="w-full text-sm">
+      <thead class="border-b border-line text-muted">
+        <tr class="text-left">
+          <th class="px-5 py-2.5 font-semibold w-2/5">Activity</th>
+          <th class="px-5 py-2.5 font-semibold">Partial</th>
+          <th class="px-5 py-2.5 font-semibold">Category</th>
+          <th class="px-5 py-2.5 font-semibold">Why</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {% for act in activities %}
+        {% set p = proposals.get(act.id) %}
+        {% set suggested = p and p.partial_id %}
+        {# The rows that need a decision are tinted. On a 64-row table the professor's whole
+           job is "deal with the ten", and hunting for them down a uniform list is the work
+           this page exists to remove. #}
+        <tr class="hover:bg-paper/60"
+            {% if p %}style="background:var(--accent-tint)"{% endif %}>
+          <td class="px-5 py-1.5 text-ink val">
+            {{ act.name }}
+            {% if act.partial_id is none and not suggested %}
+            <span class="chip chip-quiet ml-1.5" style="font-size:.62rem">unassigned</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-1.5">
+            <select name="partial_{{ act.id }}"
+                    class="text-xs border rounded-md px-2 py-1 bg-white text-ink
+                           {% if suggested %}border-[color:var(--accent)]{% else %}border-line{% endif %}">
+              <option value="">— unassigned —</option>
+              {% for partial in partials %}
+              {# The pre-fill. `act.partial_id` wins whenever it exists — a saved mapping is a
+                 human decision and a suggestion must never quietly replace one. #}
+              <option value="{{ partial.id }}"
+                      {% if act.partial_id == partial.id
+                            or (act.partial_id is none and suggested and p.partial_id == partial.id) %}selected{% endif %}>
+                {{ partial.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </td>
+          <td class="px-5 py-1.5">
+            <select name="category_{{ act.id }}"
+                    class="text-xs border rounded-md px-2 py-1 bg-white text-ink
+                           {% if suggested %}border-[color:var(--accent)]{% else %}border-line{% endif %}">
+              {% for cat in categories %}
+              <option value="{{ cat }}"
+                      {% if (act.partial_id is not none and act.category == cat)
+                            or (act.partial_id is none and suggested and p.category == cat)
+                            or (act.partial_id is none and not suggested and act.category == cat) %}selected{% endif %}>
+                {{ cat }}
+              </option>
+              {% endfor %}
+            </select>
+          </td>
+          {# Only rows with something to say say anything. The first draft printed "you
+             assigned this" on all 54 settled rows and repeated the banner's own sentence on
+             the 10 unsettled ones — 64 lines of text carrying no information, drowning the
+             handful that did. Silence is the correct rendering of "nothing to report". #}
+          <td class="px-5 py-1.5 text-xs text-muted">
+            {% if act.partial_id is none and p and p.source %}
+            <span class="chip" style="font-size:.62rem">{{ p.source }}</span>
+            <span class="ml-1">{{ p.why }}</span>
+            {% elif act.partial_id is none and p and has_snapshot %}
+            <span class="text-muted/70">{{ p.why }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <button type="submit" class="btn btn-accent">Save mapping</button>
+  <span class="text-xs text-muted ml-3">Saved in MUSAI only — nothing is written to Moodle.</span>
+</form>
+{% endif %}
+{% endblock %}

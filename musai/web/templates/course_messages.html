@@ -1,0 +1,166 @@
+{% extends "course_base.html" %}
+{% set active_tab = 'messages' %}
+{% set tab_title = 'Mensajes' %}
+{% block feature %}messages{% endblock %}
+
+{#
+  The recipient table is the point of this page, not decoration. Moodle's own compose screen
+  renders a COUNT ("Agregado nuevo receptor 1") and never the names, so this is the only
+  place the professor can see who is about to be written to while it is still preventable.
+#}
+{% block course_content %}
+<h2 class="font-serif text-2xl font-semibold text-ink">Mensajes</h2>
+<p class="text-sm text-muted mt-1 mb-6 max-w-2xl leading-relaxed">
+  Un mensaje a los participantes del grupo. El simulacro llega hasta la
+  <strong>vista previa de Moodle</strong> y no envía nada.
+</p>
+
+{# ── the rubric, because three of its nine criteria are just this feature ───────────── #}
+<div class="card p-5 mb-5">
+  <h2 class="text-sm font-bold text-ink mb-3">Evaluación docente</h2>
+  <div class="flex flex-wrap gap-3 text-xs">
+    {% set targets = {'bienvenida': 1, 'seguimiento': 2, 'cierre': 1} %}
+    {% for key, label, note in purposes %}
+      {% if key in targets %}
+      {% set n = rubric.get(key, 0) %}
+      {% set done = n >= targets[key] %}
+      <div class="rounded px-3 py-2"
+           style="background:{{ '#ECFDF5' if done else '#FEF3C7' }};
+                  color:{{ '#065F46' if done else '#78350F' }}">
+        <div class="font-bold">{{ '✓' if done else '○' }} {{ label }}</div>
+        <div>{{ n }} / {{ targets[key] }} enviado(s)</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <p class="text-xs text-muted mt-3">
+    Sólo cuentan los envíos reales. Un simulacro no le llegó a nadie.
+  </p>
+</div>
+
+{# ── who would receive it ───────────────────────────────────────────────────────────── #}
+<div class="card p-5 mb-5">
+  <div class="flex items-baseline gap-3 mb-3">
+    <h2 class="text-sm font-bold text-ink">Destinatarios</h2>
+    <span class="text-xs text-muted">
+      {{ students|length }} inscrito(s) según MUSAI. Antes de enviar se compara con lo que
+      ofrezca la página de Moodle, y si no coinciden no se envía.
+    </span>
+  </div>
+  {% if students %}
+  <div class="flex flex-wrap gap-2 text-xs">
+    {% for s in students %}
+    <span class="rounded px-2 py-1" style="background:#F1F5F9;color:#334155"
+          title="{{ s.matricula }}">{{ s.full_name|title }}</span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-sm" style="color:#9F1239">
+    🔴 MUSAI no tiene inscritos para este grupo, así que no puede verificar la lista.
+    Hay que importar el libro de calificaciones antes de enviar.
+  </p>
+  {% endif %}
+</div>
+
+{# ── compose ────────────────────────────────────────────────────────────────────────── #}
+<div class="card p-5 mb-5">
+  <form hx-post="/courses/{{ course.id }}/mensajes/run"
+        hx-target="#run-result" hx-swap="innerHTML">
+
+    <label class="text-xs block mb-4">
+      <span class="block mb-1 font-semibold text-ink">Tipo</span>
+      <select name="purpose" class="rounded border-line px-2 py-1.5 text-sm">
+        {% for key, label, note in purposes %}
+        <option value="{{ key }}">{{ label }} — {{ note }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="text-xs block mb-4">
+      <span class="block mb-1 font-semibold text-ink">Mensaje</span>
+      <textarea name="body" rows="9" required
+                class="w-full rounded border-line px-3 py-2 text-sm font-sans"
+                placeholder="Hola a todas y todos 👋&#10;&#10;Les recuerdo que…"></textarea>
+      <span class="text-muted">
+        Texto plano; los emojis funcionan. Un renglón en blanco separa párrafos.
+      </span>
+    </label>
+
+    <div class="flex flex-wrap items-center gap-4 border-t border-line pt-4">
+      <button class="btn btn-ghost text-sm" name="action" value="dryrun" type="submit">
+        👓 Simulacro
+      </button>
+      <label class="flex items-center gap-2 text-xs cursor-pointer">
+        <input type="checkbox" name="only_me" value="1" class="rounded border-line">
+        <span>Sólo a mí (prueba real de la ruta completa)</span>
+      </label>
+    </div>
+
+    {#
+      The send block renders as DISABLED whenever DRY_RUN is on, rather than looking armed
+      and refusing on click. A control that looks live and is not teaches people that the
+      refusal is noise — and the first time it does fire, it fires for real.
+    #}
+    <div class="mt-4 rounded p-3"
+         style="background:{{ '#F8FAFC' if dry_run else '#FFF1F2' }}">
+      {% if dry_run %}
+      <p class="text-xs mb-2 text-muted">
+        🔒 <strong>DRY_RUN está activo</strong>, así que enviar de verdad está bloqueado —
+        ninguna combinación de casillas lo desbloquea. Para habilitarlo hay que poner
+        <code>DRY_RUN=false</code> en <code>.env</code> y reiniciar uvicorn por completo.
+      </p>
+      {% else %}
+      <p class="text-xs mb-2" style="color:#9F1239">
+        <strong>Enviar no se puede deshacer.</strong> Escribe el código del grupo para
+        habilitarlo.
+      </p>
+      {% endif %}
+      <div class="flex flex-wrap items-center gap-3">
+        <input type="text" name="confirm" placeholder="{{ course.group_code }}"
+               autocomplete="off" {% if dry_run %}disabled{% endif %}
+               class="rounded border-line px-2 py-1.5 text-sm font-mono" style="width:10rem">
+        <button class="btn {{ 'btn-ghost' if dry_run else 'btn-danger' }}"
+                name="action" value="send" type="submit"
+                {% if dry_run %}disabled title="DRY_RUN está activo"{% endif %}>
+          ✉️ Enviar de verdad
+        </button>
+        <label class="flex items-center gap-2 text-xs cursor-pointer text-muted">
+          <input type="checkbox" name="again" value="1" class="rounded border-line"
+                 {% if dry_run %}disabled{% endif %}>
+          <span>Enviar otra vez aunque sea idéntico</span>
+        </label>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div id="run-result" class="mb-5"></div>
+
+{# ── history: the record that makes a repeat detectable at all ───────────────────────── #}
+{% if history %}
+<div class="card p-5">
+  <h2 class="text-sm font-bold text-ink mb-3">Historial</h2>
+  <table class="w-full text-xs">
+    <tbody>
+    {% for b in history %}
+    <tr class="border-t border-line">
+      <td class="py-1.5 pr-3 text-muted font-mono" style="width:8rem">
+        {{ b.created_at.strftime('%d/%m %H:%M') }}
+      </td>
+      <td class="py-1.5 pr-3" style="width:7rem">
+        <span class="rounded px-1.5 py-0.5"
+              style="background:var(--accent-tint);color:var(--accent-deep)">{{ b.purpose }}</span>
+      </td>
+      <td class="py-1.5 pr-3" style="width:7rem">
+        {% if b.dry_run %}<span class="text-muted">simulacro</span>
+        {% elif b.ok %}<span style="color:#065F46">✓ {{ b.recipient_count }} enviado(s)</span>
+        {% else %}<span style="color:#9F1239">✗ falló</span>{% endif %}
+      </td>
+      <td class="py-1.5 text-ink">{{ b.body[:90] }}{% if b.body|length > 90 %}…{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

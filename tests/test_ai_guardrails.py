@@ -92,11 +92,26 @@ def test_default_model_is_priced_and_is_a_lite_tier():
     assert pin < flash_in and pout < flash_out, "default should be cheaper than full Flash"
 
 
-def test_gemini_3_5_flash_is_dominated_by_3_6_flash():
-    """Documents WHY 3.5-flash is not the default: same input price, worse output price."""
+def test_gemini_3_5_flash_is_dominated_by_the_newer_flashes():
+    """Documents WHY 3.5-flash is never the answer: it is dearer on BOTH axes than 3.6 and 3.7.
+
+    It used to be dominated only on output (same input price, worse output). Re-checked
+    2026-08-16: the 3.6/3.7 introductory price halved the input too, so the domination is now
+    strict. If this test starts failing on the input comparison, the introductory price has
+    expired and every cost estimate in the app just doubled — see PRICES.
+    """
     in35, out35 = PRICES["gemini-3.5-flash"]
-    in36, out36 = PRICES["gemini-3.6-flash"]
-    assert in36 == in35 and out36 < out35
+    for newer in ("gemini-3.6-flash", "gemini-3.7-flash"):
+        pin, pout = PRICES[newer]
+        assert pin <= in35 and pout < out35, f"{newer} is no longer strictly cheaper"
+
+
+def test_every_model_we_might_select_has_a_known_price():
+    """A model with no PRICES entry silently falls back to the configured default rate, so the
+    cost shown to the professor would be a number about a different model. Anything nameable
+    in .env or in a Profile override has to be priced here."""
+    for model in (FLASH, "gemini-3.5-flash-lite", "gemini-3.7-flash", settings.gemini_model):
+        assert model in PRICES, f"{model} has no price entry"
 
 
 def test_unknown_model_falls_back_to_configured_prices():
@@ -110,7 +125,9 @@ def test_estimated_cost_uses_the_models_own_price():
     lite = AiResult(ok=True, tokens_in=1_000_000, tokens_out=0, model="gemini-3.5-flash-lite")
     flash = AiResult(ok=True, tokens_in=1_000_000, tokens_out=0, model=FLASH)
     assert lite.estimated_usd() == pytest.approx(0.30)
-    assert flash.estimated_usd() == pytest.approx(1.50)
+    # 0.75, not 1.50: the 3.6/3.7 introductory input price, which expires 2026-12-31.
+    assert flash.estimated_usd() == pytest.approx(PRICES[FLASH][0])
+    assert flash.estimated_usd() == pytest.approx(0.75)
 
 
 # ── budget enforcement ────────────────────────────────────────────────────────

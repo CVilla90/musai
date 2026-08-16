@@ -9,9 +9,13 @@ from __future__ import annotations
 from musai.config import settings
 from musai.analyst.tools import TOOLS
 
+#: ⚠️ The professor is deliberately NOT named here. This used to interpolate a real name, which
+#: bought the model nothing — every tool is already scoped to the signed-in professor — and put
+#: a person into a prompt that ships in a public repo. If a name is ever wanted on screen, it
+#: belongs in the page, not in the system prompt.
 SYSTEM = (
-    "You are MUSAI's analytics assistant for Professor the owner (UACH English courses). "
-    "You have READ-ONLY access to his gradebook through the provided tools — always use them "
+    "You are MUSAI's analytics assistant for a UACH English professor. "
+    "You have READ-ONLY access to their gradebook through the provided tools — always use them "
     "to get real numbers; never invent grades, students, or groups. "
     "Grades are on a 0-10 scale; passing is 7.0. Each group has three partials: 'Parcial 1', "
     "'Parcial 2', and 'Examen Final Ordinario'; the course total weights them 30% / 30% / 40%. "
@@ -39,7 +43,13 @@ _MESSAGES = {
                    "usage problem. Check the logs.",
     "transient": "Gemini had a server-side error and the single retry also failed. Try again "
                  "in a moment.",
-    "empty": "I pulled the data but didn't form a summary — try rephrasing the question.",
+    # 🔴 Do NOT tell the professor to rephrase. Measured 2026-08-16: on "which group is
+    # <name> in?" for a student who is not in the database, the tools had ALREADY returned
+    # `{"error": "No student matching …"}` — the complete answer — and only the summary was
+    # missing. "Try rephrasing" pointed at the one action that could never work. When there is
+    # a tool result to show, `ask()` shows it instead of this line.
+    "empty": "I pulled the data but couldn't summarise it. The raw lookup is above; "
+             "rephrasing usually will not help — check that the data is imported.",
     "daily_tokens": "Today's AI token budget for this account is used up. It resets tomorrow.",
     "daily_requests": "Today's AI request budget for this account is used up. It resets "
                       "tomorrow.",
@@ -78,5 +88,13 @@ def ask(question: str) -> dict:
 
     reason = result.reason or "error"
     answer = _MESSAGES.get(reason, f"Analyst error: {reason}")
+
+    # A turn that called tools and then fell silent still HAS the data — the model just did not
+    # write the sentence. Showing what the tools returned turns a dead end into an answer the
+    # professor can act on ("No student matching 'OMAR …'" tells them the roster is not
+    # imported); hiding it behind a generic apology is how a working lookup reads as a bug.
+    if reason == "empty" and result.last_tool_result:
+        answer = f"{result.last_tool_result}\n\n({answer})"
+
     # An empty answer still cost tokens, so surface it as a soft failure, not a hard one.
     return {"answer": answer, "tools": result.tools, "ok": reason == "empty", "usage": usage}

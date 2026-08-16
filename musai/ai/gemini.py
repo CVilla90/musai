@@ -71,23 +71,39 @@ class Profile:
     model: Optional[str] = None
 
 
-# Model choice (priced 2026-08, USD per 1M tokens, paid tier):
-#   gemini-3.5-flash-lite   $0.30 in / $2.50 out   ← default
-#   gemini-3.6-flash        $1.50 in / $7.50 out   (5x/3x the cost)
-#   gemini-3.5-flash        $1.50 in / $9.00 out   ← never use: 3.6-flash is the same input
-#                                                    price, cheaper output, and newer
-# MUSAI's assistant work is structured DB lookups plus a two-sentence summary — no hard
-# reasoning — so flash-lite is the right default. Generation-heavy future work (the Vellum
-# course-builder) can override `model` per profile.
+# Model choice. MUSAI's assistant work is structured DB lookups plus a two-sentence summary —
+# no hard reasoning — so flash-lite is the right default, and that was re-tested rather than
+# assumed when gemini-3.7-flash shipped on 2026-08-13.
+#
+# 🔴 **BENCHMARKED 2026-08-16 ON THE REAL ANALYST WORKLOAD** (same system prompt, same tools,
+# the professor's own questions; 6 runs per config). Upgrading the model was strictly WORSE:
+#
+#   gemini-3.5-flash-lite   6/6 answered    2.7 s/q   1544 tok/q   ← stays the default
+#   gemini-3.6-flash        4/6 answered   12.2 s/q   2338 tok/q
+#   gemini-3.7-flash        2/6 answered   30.5 s/q    709 tok/q   ← two transient 5xx
+#
+# ⚠️ **There is no 3.7 Flash-Lite.** The newest Lite tier is 3.5-flash-lite; Lite lags the
+# Flash line by roughly two releases, so "the newest model" and "the newest cheap model" are
+# different questions. And a model three days old is capacity-constrained: 3.7's failures were
+# server-side transients at 30–68 s, the same shape as the frozen computer-use demo, not a
+# reasoning limit. ⭐ Re-benchmark it in a month; do not adopt a model on its launch post.
 FLASH = "gemini-3.6-flash"
 
-# USD per 1M tokens (input, output), paid tier, checked 2026-08-06 against
+# USD per 1M tokens (input, output), paid tier, checked 2026-08-16 against
 # https://ai.google.dev/gemini-api/docs/pricing. Prices move — `settings.gemini_price_*`
 # override for any model not listed here.
+#
+# 🔴 **3.6 and 3.7 Flash carry an INTRODUCTORY price that expires 2026-12-31**, after which
+# both double to (1.50, 7.50). The numbers below are the introductory ones, so any estimate
+# made with them **understates the January bill by 2x**. A price table is a cache of a pricing
+# page, with no invalidation — re-read the page before quoting a cost, and especially before
+# adopting one of these two on the strength of being cheap.
 PRICES: dict[str, tuple[float, float]] = {
-    "gemini-3.6-flash": (1.50, 7.50),
-    "gemini-3.5-flash": (1.50, 9.00),
+    "gemini-3.7-flash": (0.75, 3.75),        # → (1.50, 7.50) on 2027-01-01
+    "gemini-3.6-flash": (0.75, 3.75),        # → (1.50, 7.50) on 2027-01-01
+    "gemini-3.5-flash": (1.50, 9.00),        # never use: dearer than 3.7 AND older
     "gemini-3.5-flash-lite": (0.30, 2.50),
+    "gemini-3.1-flash-lite": (0.25, 1.50),
     "gemini-3-flash-preview": (0.50, 3.00),
     "gemini-2.5-flash": (0.30, 2.50),
     "gemini-2.5-flash-lite": (0.10, 0.40),
@@ -121,6 +137,10 @@ class AiResult:
     tokens_out: int = 0
     calls: int = 0          # billed attempts actually made
     model: str = ""
+    #: The last value a tool actually returned this turn, as text. Carried ONLY so that a turn
+    #: which ends with no summary can still show the professor what was retrieved: the tools
+    #: had the answer, and the model simply failed to say it. Never shown on a successful turn.
+    last_tool_result: str = ""
 
     @property
     def tokens_total(self) -> int:
@@ -150,6 +170,32 @@ def _tool_names(resp) -> list[str]:
             seen.add(n)
             out.append(n)
     return out
+
+
+def _last_tool_result(resp) -> str:
+    """The last function RESPONSE in the auto-calling history, flattened to short text.
+
+    🔴 Exists because of a real, misleading failure. When the turn ends with no text part the
+    professor was told *"I pulled the data but didn't form a summary — try rephrasing the
+    question."* On a lookup for a student who is not in the database, the tool had already
+    returned `{"error": "No student matching 'OMAR …'"}` — a complete and actionable answer —
+    and rephrasing could never have produced anything else. The generic message did not just
+    fail to help, it pointed at the one action guaranteed to waste the professor's time.
+    """
+    try:
+        for content in reversed(resp.automatic_function_calling_history or []):
+            for part in reversed(getattr(content, "parts", None) or []):
+                fr = getattr(part, "function_response", None)
+                if fr is None:
+                    continue
+                payload = getattr(fr, "response", None)
+                if payload is None:
+                    continue
+                text = str(payload)
+                return text[:400] + ("…" if len(text) > 400 else "")
+    except Exception:
+        pass
+    return ""
 
 
 def _usage(resp) -> tuple[int, int]:
@@ -232,6 +278,7 @@ def generate(
         result.tokens_in += tin
         result.tokens_out += tout
         result.tools = _tool_names(resp) or result.tools
+        result.last_tool_result = _last_tool_result(resp) or result.last_tool_result
         text = (getattr(resp, "text", None) or "").strip()
 
         if text:

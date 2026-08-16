@@ -124,10 +124,30 @@ def partial_trend(group_code: str, semester: str = "") -> dict:
 
 
 def student_status(name_or_matricula: str, semester: str = "") -> dict:
-    """Look up ONE student by matrícula (digits) or by (partial) name, returning their grade
-    in every partial — exact, curve, extra, and final — plus their course total (30/30/40).
-    Defaults to the CURRENT semester; pass `semester` (e.g. '2026-1') to see how the same
-    student did previously. Use for 'how is <student> doing?', 'what's <id>'s grade?'."""
+    """Look up ONE student and return WHICH GROUP they are in, plus their grade in every
+    partial (exact, curve, extra, final) and their course total (30/30/40).
+
+    Accepts a matrícula (digits) or a full or partial NAME. This searches EVERY student across
+    ALL of the professor's groups by itself — do NOT call list_groups first, and never call this
+    once per group. A single call answers "which group is <name> in?" outright: the reply
+    carries a `group` field. If the name matches nobody the reply is {"error": ...}, and that is
+    a COMPLETE answer — report it and stop. If it matches several the reply is
+    {"ambiguous": [...]}. Defaults to the CURRENT semester; pass `semester` (e.g. '2026-1') to
+    see how the same student did previously.
+
+    Use for 'how is <student> doing?', 'what's <id>'s grade?', 'which group is <name> in?'.
+
+    🔴 The docstring IS the tool contract, and the vague version cost real answers. It said
+    only "look up ONE student", never that the search is global or that the reply names the
+    group — so on "which group is <name> in?" the model called list_groups, then groped
+    group-by-group and called list_semesters to widen, exhausted `max_remote_calls`, and the
+    turn ended holding an unexecuted function_call with no text part. The professor saw
+    "I pulled the data but didn't form a summary". Measured 2026-08-16, 6 runs per config:
+    **3/6 answered with the old wording, 6/6 with this one — on the same cheap model, with 41%
+    FEWER tokens and less than half the latency.** Raising the call cap also reached 6/6 but
+    took 10.3 s/question against 2.7 s, because it buys groping room instead of removing the
+    need to grope. ⭐ Upgrading the model was strictly worse: gemini-3.7-flash scored 2/6 at
+    30.5 s/question. A tool whose description understates it is not a model problem."""
     q = name_or_matricula.strip().lower()
     with Session(ro_engine) as s:
         students = s.exec(select(Student)).all()

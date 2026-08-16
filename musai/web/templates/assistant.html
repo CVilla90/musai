@@ -1,33 +1,39 @@
 {% extends "base.html" %}
 {% set nav_section = 'assistant' %}
-{% block title %}Assistant — MUSAI{% endblock %}
+{% block title %}{{ t("Assistant") }} — MUSAI{% endblock %}
 
 {% block content %}
 <div class="mb-4 flex items-center gap-3">
-  <a href="/" class="text-muted hover:text-ink text-sm">← Cockpit</a>
-  <h1 class="font-serif text-2xl font-semibold text-ink">Assistant</h1>
-  <span class="text-muted text-xs">read-only · {{ model }}</span>
+  <a href="/" class="text-muted hover:text-ink text-sm">{{ t("← Cockpit") }}</a>
+  <h1 class="font-serif text-2xl font-semibold text-ink">{{ t("Assistant") }}</h1>
+  <span class="text-muted text-xs">{{ t("read-only") }} · {{ model }}</span>
 </div>
 
 {% if not has_key %}
-<div class="card p-4 text-sm" style="background:#FBF1E1;color:#B45309">
-  No <code>GEMINI_API_KEY</code> set in <code>MUSAI/.env</code> — the assistant is offline.
+<div class="card prose p-4 text-sm" style="background:#FBF1E1;color:#B45309">
+  {{ t("No <code>GEMINI_API_KEY</code> set in <code>MUSAI/.env</code> — the assistant is
+        offline.") }}
 </div>
 {% else %}
 
 <div class="card p-4">
   <div id="chat" class="space-y-4 max-h-[58vh] overflow-y-auto pr-1">
     <div class="text-sm text-muted">
-      Ask about your groups — status, individual students, trends across partials, who's at
-      risk — or about MUSAI itself: what it can do, and how.
+      {{ t("Ask about your groups — status, individual students, trends across partials, who's
+            at risk — or about MUSAI itself: what it can do, and how.") }}
       {# 🔴 The suggestions are the only place most professors learn what the assistant is FOR,
          so the two kinds of question both have to appear here. A help corpus nobody knows to
-         ask about is a corpus nobody reads. #}
+         ask about is a corpus nobody reads.
+
+         ⚠️ These are translated even though the assistant understands both languages, because
+         a suggestion is a *sample of what you may ask*. Left in English on a Spanish page they
+         would teach a professor that questions have to be asked in English — the opposite of
+         true, and the kind of wrong lesson nobody thinks to correct. #}
       <div class="mt-3 flex flex-wrap gap-2">
-        {% for s in ["How is 1-LED-A doing in Parcial 1?", "Who is at risk in 1-LED-A?",
-                     "Trend of 1-LED-A across partials",
-                     "How do I set dates on every activity?",
-                     "What happens when I restore a course?"] %}
+        {% for s in [t("How is 1-LED-A doing in Parcial 1?"), t("Who is at risk in 1-LED-A?"),
+                     t("Trend of 1-LED-A across partials"),
+                     t("How do I set dates on every activity?"),
+                     t("What happens when I restore a course?")] %}
         <button type="button"
                 class="text-xs px-2.5 py-1 rounded-full border border-line text-muted hover:text-clay hover:border-clay/40 js-suggest">
           {{ s }}
@@ -41,22 +47,22 @@
         hx-post="/assistant/ask" hx-target="#chat" hx-swap="beforeend"
         hx-indicator="#thinking" hx-on::after-request="if(event.detail.successful){this.reset()}">
     <input id="q" name="q" autocomplete="off" required
-           placeholder="Ask the assistant…"
+           placeholder="{{ t('Ask the assistant…') }}"
            class="flex-1 text-sm border border-line rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-clay/50">
-    <button class="btn btn-clay">Ask</button>
+    <button class="btn btn-clay">{{ t("Ask") }}</button>
   </form>
   <div id="thinking" class="htmx-indicator flex items-center gap-2 mt-2 text-xs text-muted">
     {# Not "consulting the gradebook" any more: half the questions now go to the help corpus,
        and a spinner that names the wrong source is a small lie told on every turn. #}
-    <span class="spin"></span> looking it up…
+    <span class="spin"></span> {{ t("looking it up…") }}
   </div>
 </div>
 
 <p class="text-xs text-muted mt-3">
-  The assistant reads through read-only tools only — your own groups' grades, and MUSAI's help
-  topics. It can never change anything, and it sees no course but yours. For a question about
-  the app it answers from a help topic and cites it; if none covers your question it says so
-  rather than guessing.
+  {{ t("The assistant reads through read-only tools only — your own groups' grades, and
+        MUSAI's help topics. It can never change anything, and it sees no course but yours.
+        For a question about the app it answers from a help topic and cites it; if none covers
+        your question it says so rather than guessing.") }}
 </p>
 
 <style>.htmx-indicator{display:none}.htmx-request #thinking,.htmx-request.htmx-indicator{display:flex}</style>

@@ -1,10 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+{# 🔴 Computed, not typed. This file said `en` and `base.html` said `es` while both served
+   English — see the note in `base.html`. Signed out there is no professor row yet, so the
+   language here comes from the `musai_lang` cookie the picker below writes; it is adopted onto
+   the account the first time MUSAI knows who is reading. #}
+<html lang="{{ lang() }}">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MUSAI — the console behind your courses</title>
-<meta name="description" content="MUSAI reads your Moodle gradebook, computes each partial and saves it into SEGA. Professor sign-in, @uach.mx only." />
+<title>{{ t("MUSAI — the console behind your courses") }}</title>
+<meta name="description" content="{{ t('MUSAI reads your Moodle gradebook, computes each partial and saves it into SEGA. Professor sign-in, @uach.mx only.') }}" />
 <meta name="robots" content="noindex" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -218,6 +222,13 @@ a{ color:inherit; }
   color:var(--dim); cursor:pointer; white-space:nowrap;
   transition:color .15s ease, border-color .15s ease; }
 .theme:hover{ color:var(--paper); border-color:var(--dim); }
+/* The language pair. Same mono chip family as the status and the theme control beside it —
+   it is the same kind of thing: a small statement of what mode you are in. */
+.lang-pick{ display:inline-flex; align-items:center; gap:.35rem;
+  font-family:var(--mono); font-size:.62rem; letter-spacing:.16em; text-transform:uppercase; }
+.lang-pick a{ text-decoration:none; color:var(--dim); padding:.33rem .4rem; border-radius:.3rem; }
+.lang-pick a:hover{ color:var(--paper); }
+.lang-pick a[aria-current="true"]{ color:var(--black); font-weight:500; }
 /* Half-filled disc — the universal contrast glyph, drawn rather than fetched. */
 .theme-ico{ width:10px; height:10px; border-radius:50%; flex:none;
   border:1px solid currentColor;
@@ -428,18 +439,34 @@ footer .sep{ margin-left:auto; }
     <span class="mark">MUSAI</span>
     <span class="mark-sub">Moodle · UACH · Suite + AI</span>
     {% if dry_run %}
-    <span class="status" title="Every write to Moodle and SEGA is simulated until you say otherwise.">
-      <span class="led"></span> Dry-run · no writes
+    <span class="status" title="{{ t('Every write to Moodle and SEGA is simulated until you say otherwise.') }}">
+      <span class="led"></span> {{ t("Dry-run · no writes") }}
     </span>
     {% else %}
-    <span class="status is-live" title="Writes to Moodle and SEGA are enabled.">
-      <span class="led"></span> Live · writes enabled
+    <span class="status is-live" title="{{ t('Writes to Moodle and SEGA are enabled.') }}">
+      <span class="led"></span> {{ t("Live · writes enabled") }}
     </span>
     {% endif %}
+
+    {# ── EN | ES ────────────────────────────────────────────────────────────
+       🔴 This is the ONLY place the choice can be made before signing in, and it is the page a
+       colleague is sent a link to. Without it, a Spanish-speaking professor's first contact
+       with MUSAI is an English page with no visible way out of English — and the Settings tab
+       that would fix it is behind the sign-in button they are trying to decide about.
+       `/lang/{code}` writes the cookie; `for_professor()` adopts it onto the account the
+       moment sign-in succeeds, so the language does not flip back at the door. #}
+    <span class="lang-pick" role="group" aria-label="{{ t('Language') }}">
+      {% for code in LANGUAGES %}
+      <a href="/lang/{{ code }}" hreflang="{{ code }}" title="{{ LANGUAGE_NAMES[code] }}"
+         {% if lang() == code %}aria-current="true"{% endif %}>{{ code }}</a>
+      {% endfor %}
+    </span>
+
     <button class="theme" type="button" id="theme-toggle" aria-pressed="false"
-            aria-label="Switch between the light and the dark treatment">
+            aria-label="{{ t('Switch between the light and the dark treatment') }}">
       <span class="theme-ico" aria-hidden="true"></span>
-      <span id="theme-label">Dark</span>
+      <span id="theme-label" data-light="{{ t('Light') }}" data-dark="{{ t('Dark') }}"
+        >{{ t("Dark") }}</span>
     </button>
   </header>
 
@@ -448,72 +475,94 @@ footer .sep{ margin-left:auto; }
     <p class="eyebrow rise d1">
       <span class="greek">Μοῦσαι</span>
       <span class="tick">/</span>
-      <span>Professor console</span>
+      <span>{{ t("Professor console") }}</span>
       <span class="tick">/</span>
+      {# Not translated: it is the faculty's own name, and it is already Spanish. #}
       <span>Facultad de Ciencias de la Cultura Física</span>
     </p>
 
-    <h1 class="rise d2">Every course you teach, on <em>one console</em>.</h1>
+    <h1 class="rise d2">{{ t("Every course you teach, on <em>one console</em>.") }}</h1>
 
     <p class="lede rise d3">
-      MUSAI reads your Moodle gradebook, computes each partial and saves it into SEGA.
-      It builds the course, dates every activity, and writes to your groups —
-      <strong>then stops, and waits for you to confirm.</strong>
+      {{ t("MUSAI reads your Moodle gradebook, computes each partial and saves it into SEGA.
+            It builds the course, dates every activity, and writes to your groups —
+            <strong>then stops, and waits for you to confirm.</strong>") }}
     </p>
 
     <!-- Notices, ahead of the button. Each one names what happened and what to do about it. -->
+    {# 🔴 Every one of these is a REFUSAL, and each says what happened and what to do next.
+       None of them may soften in translation into "algo salió mal": a professor who cannot
+       tell "wrong account" from "the server is broken" retries the thing that cannot work. #}
     {% if not auth_configured %}
     <div class="notice rise d4" role="alert">
-      <h2>Configuration incomplete</h2>
+      <h2>{{ t("Configuration incomplete") }}</h2>
       <p>
         {% for key in missing_config %}<code>{{ key }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
-        {{ 'is' if missing_config|length == 1 else 'are' }} not set in <code>.env</code>.
-        Until then every cockpit route answers 503 — MUSAI seals itself rather than serving
-        the gradebook without a gate. Set the value{{ '' if missing_config|length == 1 else 's' }}
-        and restart uvicorn fully; <code>--reload</code> does not reread <code>.env</code>.
+        {% if missing_config|length == 1 %}
+        {{ t("is not set in <code>.env</code>. Until then every cockpit route answers 503 —
+              MUSAI seals itself rather than serving the gradebook without a gate. Set the
+              value and restart uvicorn fully; <code>--reload</code> does not reread
+              <code>.env</code>.") }}
+        {% else %}
+        {{ t("are not set in <code>.env</code>. Until then every cockpit route answers 503 —
+              MUSAI seals itself rather than serving the gradebook without a gate. Set the
+              values and restart uvicorn fully; <code>--reload</code> does not reread
+              <code>.env</code>.") }}
+        {% endif %}
       </p>
     </div>
     {% elif auth_error == 'domain' %}
     <div class="notice rise d4" role="alert">
-      <h2>Wrong account</h2>
+      <h2>{{ t("Wrong account") }}</h2>
       <p>
-        {% if attempted %}<code>{{ attempted }}</code> is not{% else %}That account is not{% endif %}
-        an <b>@{{ allowed_domain }}</b> address. MUSAI accepts university accounts only.
-        Sign in again and pick your <b>@{{ allowed_domain }}</b> account — or switch accounts in Google first.
+        {% if attempted %}
+        {{ t("<code>{email}</code> is not an <b>@{domain}</b> address. MUSAI accepts university
+              accounts only. Sign in again and pick your <b>@{domain}</b> account — or switch
+              accounts in Google first.", email=attempted, domain=allowed_domain) }}
+        {% else %}
+        {{ t("That account is not an <b>@{domain}</b> address. MUSAI accepts university
+              accounts only. Sign in again and pick your <b>@{domain}</b> account — or switch
+              accounts in Google first.", domain=allowed_domain) }}
+        {% endif %}
       </p>
     </div>
     {% elif auth_error == 'student' %}
     <div class="notice rise d4" role="alert">
-      <h2>Student account</h2>
+      <h2>{{ t("Student account") }}</h2>
       <p>
-        {% if attempted %}<code>{{ attempted }}</code> is a student address.{% else %}That is a
-        student address.{% endif %}
-        MUSAI is the professor's console — your courses, grades and deadlines live in Moodle,
-        and SUSAI answers on WhatsApp. If you are a professor, sign in with your staff
-        <b>@{{ allowed_domain }}</b> account instead.
+        {% if attempted %}
+        {{ t("<code>{email}</code> is a student address.", email=attempted) }}
+        {% else %}
+        {{ t("That is a student address.") }}
+        {% endif %}
+        {{ t("MUSAI is the professor's console — your courses, grades and deadlines live in
+              Moodle, and SUSAI answers on WhatsApp. If you are a professor, sign in with your
+              staff <b>@{domain}</b> account instead.", domain=allowed_domain) }}
       </p>
     </div>
     {% elif auth_error == 'unverified' %}
     <div class="notice rise d4" role="alert">
-      <h2>Address not verified</h2>
-      <p>Google has not verified the email on that account, so MUSAI cannot treat it as proof of
-         who you are. Verify it with Google, then sign in again.</p>
+      <h2>{{ t("Address not verified") }}</h2>
+      <p>{{ t("Google has not verified the email on that account, so MUSAI cannot treat it as
+               proof of who you are. Verify it with Google, then sign in again.") }}</p>
     </div>
     {% elif auth_error == 'expired' %}
     <div class="notice is-quiet rise d4" role="status">
-      <h2>Session ended</h2>
-      <p>You were signed out after a week of inactivity. Sign in to pick up where you left off.</p>
+      <h2>{{ t("Session ended") }}</h2>
+      <p>{{ t("You were signed out after a week of inactivity. Sign in to pick up where you
+               left off.") }}</p>
     </div>
     {% elif auth_error %}
     <div class="notice rise d4" role="alert">
-      <h2>Sign-in did not complete</h2>
-      <p>Google returned before the round trip finished. Try again — if it repeats, check that
-         this exact origin is listed as an authorized redirect URI on the OAuth client.</p>
+      <h2>{{ t("Sign-in did not complete") }}</h2>
+      <p>{{ t("Google returned before the round trip finished. Try again — if it repeats, check
+               that this exact origin is listed as an authorized redirect URI on the OAuth
+               client.") }}</p>
     </div>
     {% elif signed_out %}
     <div class="notice is-quiet rise d4" role="status">
-      <h2>Signed out</h2>
-      <p>Your session on this browser is closed.</p>
+      <h2>{{ t("Signed out") }}</h2>
+      <p>{{ t("Your session on this browser is closed.") }}</p>
     </div>
     {% endif %}
 
@@ -526,9 +575,10 @@ footer .sep{ margin-left:auto; }
           <path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.8-2.9-.8-4.4s.3-3.1.7-4.4v-.4l-6.8-5.3-.2.1C2.9 16.9 2 20.3 2 24s.9 7.1 2.4 10.1l7.1-5.7z"/>
           <path fill="#EA4335" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.3 29.9 2 24 2 15.4 2 7.9 7 4.4 13.9l7.1 5.7c1.8-5.3 6.7-9.1 12.5-9.1z"/>
         </svg>
-        Sign in with Google
+        {{ t("Sign in with Google") }}
       </a>
-      <p class="gate">Only <b>@{{ allowed_domain }}</b> accounts. Students never sign in here.</p>
+      <p class="gate">{{ t("Only <b>@{domain}</b> accounts. Students never sign in here.",
+                           domain=allowed_domain) }}</p>
       {# 🔴 There is deliberately NO link to `/auth/login?any=1` here. The owner's instruction,
          2026-08-16: the recovery path is his alone and nobody else should learn it exists.
          A visible link never exposed the ADDRESS — Google's chooser only lists accounts signed
@@ -540,9 +590,9 @@ footer .sep{ margin-left:auto; }
         <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" style="opacity:.35">
           <path fill="currentColor" d="M24 4a20 20 0 100 40 20 20 0 000-40zm0 6a14 14 0 0111.1 22.6L17.4 14.9A13.9 13.9 0 0124 10zm0 28a14 14 0 01-11.1-22.6l17.7 17.7A13.9 13.9 0 0124 38z"/>
         </svg>
-        Sign-in unavailable
+        {{ t("Sign-in unavailable") }}
       </span>
-      <p class="gate">The console is sealed until it is configured.</p>
+      <p class="gate">{{ t("The console is sealed until it is configured.") }}</p>
       {% endif %}
     </div>
 
@@ -551,35 +601,37 @@ footer .sep{ margin-left:auto; }
   <!-- ══ What it does ══════════════════════════════════════════════════ -->
   <section class="band">
     <div class="band-head reveal">
-      <h2>What it does</h2>
-      <span class="aside">Four jobs, each one a full afternoon by hand.</span>
+      <h2>{{ t("What it does") }}</h2>
+      <span class="aside">{{ t("Four jobs, each one a full afternoon by hand.") }}</span>
     </div>
     <div class="grid4">
       <article class="cap reveal" data-c="transfer">
-        <span class="n">Build</span>
-        <h3>Copy a course that works</h3>
-        <p>Restore a finished course into another group — sections, dates, filters and tab
-           visibility intact — then count it back from a fresh login, because a restore's own
-           report has been wrong more often than it has been right.</p>
+        <span class="n">{{ t("Build") }}</span>
+        <h3>{{ t("Copy a course that works") }}</h3>
+        <p>{{ t("Restore a finished course into another group — sections, dates, filters and
+                 tab visibility intact — then count it back from a fresh login, because a
+                 restore's own report has been wrong more often than it has been right.") }}</p>
       </article>
       <article class="cap reveal" data-c="dates">
-        <span class="n">Schedule</span>
-        <h3>Date every activity</h3>
-        <p>Cut the semester into partials and write open and close dates across every quiz,
-           assignment and forum. Each one is read back from its own settings form, which is the
-           only reading that tells the truth.</p>
+        <span class="n">{{ t("Schedule") }}</span>
+        <h3>{{ t("Date every activity") }}</h3>
+        <p>{{ t("Cut the semester into partials and write open and close dates across every
+                 quiz, assignment and forum. Each one is read back from its own settings form,
+                 which is the only reading that tells the truth.") }}</p>
       </article>
       <article class="cap reveal" data-c="grades">
-        <span class="n">Grade</span>
-        <h3>Compute the partial, exactly</h3>
-        <p>General 60, Special 20, Exam 20. The exact machine grade is kept untouched; curves and
-           extra credit are separate, visible layers on top of it, never edits to the original.</p>
+        <span class="n">{{ t("Grade") }}</span>
+        <h3>{{ t("Compute the partial, exactly") }}</h3>
+        <p>{{ t("General 60, Special 20, Exam 20. The exact machine grade is kept untouched;
+                 curves and extra credit are separate, visible layers on top of it, never edits
+                 to the original.") }}</p>
       </article>
       <article class="cap reveal" data-c="messages">
-        <span class="n">Reach</span>
-        <h3>Write to a whole group</h3>
-        <p>One message to every student in a course, recorded before it is sent so that a retry
-           can never deliver it twice. Who was skipped is stored too, with the reason.</p>
+        <span class="n">{{ t("Reach") }}</span>
+        <h3>{{ t("Write to a whole group") }}</h3>
+        <p>{{ t("One message to every student in a course, recorded before it is sent so that a
+                 retry can never deliver it twice. Who was skipped is stored too, with the
+                 reason.") }}</p>
       </article>
     </div>
   </section>
@@ -587,8 +639,9 @@ footer .sep{ margin-left:auto; }
   <!-- ══ The three rails — signature ═══════════════════════════════════ -->
   <section class="band" data-c="rails">
     <div class="band-head reveal">
-      <h2>The three rails</h2>
-      <span class="aside">A cut track is a position the code cannot reach. An unbroken one is a switch you can throw.</span>
+      <h2>{{ t("The three rails") }}</h2>
+      <span class="aside">{{ t("A cut track is a position the code cannot reach. An unbroken
+                                one is a switch you can throw.") }}</span>
     </div>
 
     <div class="rails reveal">
@@ -596,57 +649,65 @@ footer .sep{ margin-left:auto; }
       <div class="rail">
         <div class="rail-body">
           <div class="rail-top">
-            <span class="n">Rail 1</span>
-            <h3>Save, never confirm</h3>
+            <span class="n">{{ t("Rail 1") }}</span>
+            <h3>{{ t("Save, never confirm") }}</h3>
           </div>
-          <p>The SEGA adapter can click <i>Guardar</i>. It has no code path to <i>Confirmar</i> —
-             not a disabled button, not a warning dialog, simply no route there at all.</p>
+          {# 🔴 *Guardar* and *Confirmar* keep their names in both languages: they are the SEGA
+             buttons themselves. This paragraph is a promise about which button the code can
+             reach, and a promise about a translated button is a promise about nothing. #}
+          <p>{{ t("The SEGA adapter can click <i>Guardar</i>. It has no code path to
+                   <i>Confirmar</i> — not a disabled button, not a warning dialog, simply no
+                   route there at all.") }}</p>
         </div>
         <div class="rail-inst">
           <div class="track" role="img"
-               aria-label="Track: locked at Save. Confirm is unreachable — the track is cut.">
-            <span class="stop on"><span class="dot"></span>Save</span>
+               aria-label="{{ t('Track: locked at Save. Confirm is unreachable — the track is cut.') }}">
+            <span class="stop on"><span class="dot"></span>{{ t("Save") }}</span>
             <span class="seg solid"></span>
             <span class="cut"></span>
             <span class="seg dead"></span>
-            <span class="stop off"><span class="ring"></span>Confirm</span>
+            <span class="stop off"><span class="ring"></span>{{ t("Confirm") }}</span>
           </div>
-          <p class="rail-foot">Confirming a grade is <b>yours</b>, and stays a human act.</p>
+          <p class="rail-foot">{{ t("Confirming a grade is <b>yours</b>, and stays a human
+                                    act.") }}</p>
         </div>
       </div>
 
       <div class="rail">
         <div class="rail-body">
           <div class="rail-top">
-            <span class="n">Rail 2</span>
-            <h3>Dry-run by default</h3>
+            <span class="n">{{ t("Rail 2") }}</span>
+            <h3>{{ t("Dry-run by default") }}</h3>
           </div>
-          <p>Every write to a live system is simulated first and prints what it would have done.
-             This is the one rail with a far end you can actually reach — deliberately, because a
-             real write has to be a decision somebody made out loud.</p>
+          <p>{{ t("Every write to a live system is simulated first and prints what it would
+                   have done. This is the one rail with a far end you can actually reach —
+                   deliberately, because a real write has to be a decision somebody made out
+                   loud.") }}</p>
         </div>
         <div class="rail-inst">
         {% if dry_run %}
         <div class="track" role="img"
-             aria-label="Track: currently at Dry-run. Live is reachable but not selected.">
-          <span class="stop on"><span class="dot"></span>Dry-run</span>
+             aria-label="{{ t('Track: currently at Dry-run. Live is reachable but not selected.') }}">
+          <span class="stop on"><span class="dot"></span>{{ t("Dry-run") }}</span>
           <span class="seg solid"></span>
           <span class="seg open"></span>
-          <span class="stop off"><span class="ring"></span>Live</span>
+          <span class="stop off"><span class="ring"></span>{{ t("Live") }}</span>
         </div>
-        <p class="rail-foot">Right now: <b>simulating. Nothing reaches Moodle or SEGA.</b></p>
+        <p class="rail-foot">{{ t("Right now: <b>simulating. Nothing reaches Moodle or
+                                   SEGA.</b>") }}</p>
         {% else %}
-        <div class="track" role="img" aria-label="Track: currently at Live. Writes are enabled.">
-          <span class="stop off"><span class="ring"></span>Dry-run</span>
+        <div class="track" role="img" aria-label="{{ t('Track: currently at Live. Writes are enabled.') }}">
+          <span class="stop off"><span class="ring"></span>{{ t("Dry-run") }}</span>
           <span class="seg open"></span>
           <span class="seg solid" style="background:linear-gradient(to right,var(--ink-line),var(--warn))"></span>
           <span class="stop on" style="color:var(--warn)">
             <span class="dot"
                   style="background:var(--warn);
-                         box-shadow:0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent)"></span>Live
+                         box-shadow:0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent)"></span>{{ t("Live") }}
           </span>
         </div>
-        <p class="rail-foot">Right now: <b>writes are enabled.</b> Someone set this on purpose.</p>
+        <p class="rail-foot">{{ t("Right now: <b>writes are enabled.</b> Someone set this on
+                                   purpose.") }}</p>
         {% endif %}
         </div>
       </div>
@@ -654,23 +715,23 @@ footer .sep{ margin-left:auto; }
       <div class="rail">
         <div class="rail-body">
           <div class="rail-top">
-            <span class="n">Rail 3</span>
-            <h3>SUSAI is read-only</h3>
+            <span class="n">{{ t("Rail 3") }}</span>
+            <h3>{{ t("SUSAI is read-only") }}</h3>
           </div>
-          <p>The student assistant runs in its own process, as its own database role. It can
-             append to a conversation and nothing else. It cannot see the grading code, let
-             alone run it.</p>
+          <p>{{ t("The student assistant runs in its own process, as its own database role. It
+                   can append to a conversation and nothing else. It cannot see the grading
+                   code, let alone run it.") }}</p>
         </div>
         <div class="rail-inst">
           <div class="track" role="img"
-               aria-label="Track: locked at Read. Write is unreachable — the track is cut.">
-            <span class="stop on"><span class="dot"></span>Read</span>
+               aria-label="{{ t('Track: locked at Read. Write is unreachable — the track is cut.') }}">
+            <span class="stop on"><span class="dot"></span>{{ t("Read") }}</span>
             <span class="seg solid"></span>
             <span class="cut"></span>
             <span class="seg dead"></span>
-            <span class="stop off"><span class="ring"></span>Write</span>
+            <span class="stop off"><span class="ring"></span>{{ t("Write") }}</span>
           </div>
-          <p class="rail-foot">Enforced by the <b>database</b>, not by the prompt.</p>
+          <p class="rail-foot">{{ t("Enforced by the <b>database</b>, not by the prompt.") }}</p>
         </div>
       </div>
 
@@ -680,31 +741,36 @@ footer .sep{ margin-left:auto; }
   <!-- ══ SUSAI ═════════════════════════════════════════════════════════ -->
   <section class="band" data-c="susai">
     <div class="band-head reveal">
-      <h2>The other half</h2>
-      <span class="aside">Your students never see this console.</span>
+      <h2>{{ t("The other half") }}</h2>
+      <span class="aside">{{ t("Your students never see this console.") }}</span>
     </div>
     <div class="susai">
       <div class="reveal">
-        <p class="who">SUSAI · on WhatsApp</p>
-        <h3>Students ask WhatsApp, not you.</h3>
-        <p>MUSAI inspires the professor; SUSAI supports the students. Deadlines, grades and what
-           is due next — answered on the number they already have open, at eleven at night, without
-           a login and without reaching you.</p>
-        <p>It reads. It never grades, never edits a course, and never sees a roster it was not asked about.</p>
+        <p class="who">{{ t("SUSAI · on WhatsApp") }}</p>
+        <h3>{{ t("Students ask WhatsApp, not you.") }}</h3>
+        <p>{{ t("MUSAI inspires the professor; SUSAI supports the students. Deadlines, grades
+                 and what is due next — answered on the number they already have open, at
+                 eleven at night, without a login and without reaching you.") }}</p>
+        <p>{{ t("It reads. It never grades, never edits a course, and never sees a roster it
+                 was not asked about.") }}</p>
       </div>
-      <div class="chat reveal" aria-label="Example WhatsApp exchange with SUSAI">
+      {# 🔴 The bubbles stay Spanish in BOTH languages. They are a transcript of what a UACH
+         student actually types to SUSAI, and SUSAI answers students in Spanish — translating
+         the exhibit into English would show an English reader a conversation that never
+         happens. The caption around it is the part that is translated. #}
+      <div class="chat reveal" aria-label="{{ t('Example WhatsApp exchange with SUSAI') }}">
         <div class="bub them">¿Cuándo cierra el Workbook Practice #2?</div>
         <div class="bub us">Cierra el viernes 21 a las 23:59. Llevas 3 de 4 actividades del Parcial 2.</div>
         <div class="bub them">¿Y mi calificación del parcial 1?</div>
         <div class="bub us">8.4. Si quieres el desglose por actividad, te lo mando.</div>
-        <p class="ro">Read-only · no grade was changed in this conversation</p>
+        <p class="ro">{{ t("Read-only · no grade was changed in this conversation") }}</p>
       </div>
     </div>
   </section>
 
   <footer>
     <span>MUSAI · Moodle UACH Suite + AI</span>
-    <span>Μοῦσαι — the Muses, for the professor</span>
+    <span>{{ t("Μοῦσαι — the Muses, for the professor") }}</span>
     <a href="mailto:professor@uach.mx">professor@uach.mx</a>
     <span class="sep">CV Labs for Education</span>
   </footer>
@@ -753,9 +819,11 @@ footer .sep{ margin-left:auto; }
   function isDark() {
     return root.getAttribute("data-theme") === "dark";
   }
+  // The two words come off the element as data attributes rather than being written here:
+  // they are copy, and copy in a <script> is the region a translation audit walks past.
   function paintLabel() {
     var dark = isDark();
-    label.textContent = dark ? "Light" : "Dark";
+    label.textContent = dark ? label.dataset.light : label.dataset.dark;
     btn.setAttribute("aria-pressed", dark ? "true" : "false");
   }
   btn.addEventListener("click", function () {

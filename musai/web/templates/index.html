@@ -1,14 +1,20 @@
 {% extends "base.html" %}
-{% block title %}MUSAI — Cockpit{% endblock %}
+{% block title %}MUSAI — {{ t("Cockpit") }}{% endblock %}
 
 {% block content %}
 <div class="mb-7 flex items-start justify-between gap-4 flex-wrap">
   <div>
-    <h1 class="font-serif text-3xl font-semibold text-ink">Cockpit</h1>
+    <h1 class="font-serif text-3xl font-semibold text-ink">{{ t("Cockpit") }}</h1>
     <p class="text-muted mt-1 text-sm">
       {% if courses %}
-      Your {{ courses|length }} course{{ '' if courses|length == 1 else 's' }} in
-      {{ semester_label }}.
+      {# Two keys rather than one with a plural rule: Spanish and English happen to agree on
+         where the "s" goes here, but a rule that only works because two languages agree is a
+         rule waiting for a third. #}
+      {% if courses|length == 1 %}
+      {{ t("Your course in {sem}.", sem=semester_label) }}
+      {% else %}
+      {{ t("Your {n} courses in {sem}.", n=courses|length, sem=semester_label) }}
+      {% endif %}
       {% else %}
       {{ semester_label }}
       {% endif %}
@@ -18,7 +24,7 @@
   <div class="flex items-center gap-3 flex-wrap">
     {% if semesters|length > 1 %}
     <div class="flex items-center gap-2 text-sm">
-      <span class="text-muted text-xs">Semester</span>
+      <span class="text-muted text-xs">{{ t("Semester") }}</span>
       <select onchange="location.href='/?semester='+encodeURIComponent(this.value)"
               class="rounded-lg border border-line bg-white px-3 py-1.5 text-sm text-ink">
         {% for s in semesters %}
@@ -28,7 +34,7 @@
         {% endfor %}
       </select>
       {% if not is_current %}
-      <span class="text-[11px] px-2 py-0.5 rounded-full text-clay-700" style="background:#FBF1E1">past</span>
+      <span class="text-[11px] px-2 py-0.5 rounded-full text-clay-700" style="background:#FBF1E1">{{ t("past") }}</span>
       {% endif %}
     </div>
     {% endif %}
@@ -37,7 +43,7 @@
     {# Re-mapping is always available: a course added late, a group renamed, a shell that only
        appeared this week. It is additive — nothing is ever removed by a re-map. #}
     <button class="btn btn-ghost" hx-post="/courses/map" hx-target="#map-work" hx-swap="innerHTML">
-      Update from Moodle
+      {{ t("Update from Moodle") }}
     </button>
     {% endif %}
   </div>
@@ -50,8 +56,8 @@
   <table class="w-full text-sm">
     <thead class="border-b border-line text-muted">
       <tr class="text-left">
-        <th class="px-5 py-3 font-semibold">Group</th>
-        <th class="px-5 py-3 font-semibold">Subject</th>
+        <th class="px-5 py-3 font-semibold">{{ t("Group") }}</th>
+        <th class="px-5 py-3 font-semibold">{{ t("Subject") }}</th>
         <th class="px-5 py-3 font-semibold">Moodle</th>
         <th class="px-5 py-3 font-semibold text-right"></th>
       </tr>
@@ -70,10 +76,10 @@
         <td class="px-5 py-3 text-right whitespace-nowrap">
           <a href="/courses/{{ course.id }}/transfer"
              class="text-xs font-semibold mr-4 hover:underline"
-             style="color:#9C5730">Backup &amp; restore</a>
+             style="color:#9C5730">{{ t("Backup &amp; restore") }}</a>
           <a href="/courses/{{ course.id }}"
              class="text-xs font-semibold hover:underline"
-             style="color:var(--accent-deep)">Open →</a>
+             style="color:var(--accent-deep)">{{ t("Open →") }}</a>
         </td>
       </tr>
       {% endfor %}
@@ -86,11 +92,13 @@
    old semester from today's dashboard would create this semester's courses under last
    semester's name. #}
 <div class="card p-10 text-center">
-  <p class="text-lg font-medium text-ink">No courses in {{ semester_label }}.</p>
+  <p class="text-lg font-medium text-ink">{{ t("No courses in {sem}.", sem=semester_label) }}</p>
   <p class="text-sm text-muted mt-1">
-    MUSAI can only read the courses on your Moodle dashboard today, which is this semester's.
+    {{ t("MUSAI can only read the courses on your Moodle dashboard today, which is this
+          semester's.") }}
   </p>
-  <a href="/" class="btn btn-clay mt-5">Back to {{ semesters[0].name if semesters else 'now' }}</a>
+  <a href="/" class="btn btn-clay mt-5">
+    {{ t("Back to {sem}", sem=semesters[0].name if semesters else t("now")) }}</a>
 </div>
 
 {% else %}
@@ -99,41 +107,40 @@
    offering. Offering a button that is going to fail is worse than explaining the setup. #}
 <div class="card p-10 max-w-2xl mx-auto text-center">
   <p class="font-serif text-2xl font-semibold text-ink">
-    No courses loaded for {{ semester_label }} yet
+    {{ t("No courses loaded for {sem} yet", sem=semester_label) }}
   </p>
 
   {% if not vault_ready %}
-  <p class="text-sm text-muted mt-3 leading-relaxed">
-    MUSAI can read your courses straight from Moodle, but password storage is not set up on
-    this server yet, so it cannot sign in as you. That is a one-line fix in
-    <code class="bg-paper px-1.5 py-0.5 rounded border border-line">.env</code> —
-    <a href="/settings" class="font-semibold" style="color:#4F46E5">Settings</a> explains it.
+  <p class="prose text-sm text-muted mt-3 leading-relaxed">
+    {{ t("MUSAI can read your courses straight from Moodle, but password storage is not set up
+          on this server yet, so it cannot sign in as you. That is a one-line fix in
+          <code>.env</code> — <a href='/settings'>Settings</a> explains it.") }}
   </p>
 
   {% elif not moodle_stored %}
-  <p class="text-sm text-muted mt-3 leading-relaxed">
-    MUSAI reads your course list from
-    <span class="font-mono">campusvirtual.uach.mx</span> — the same dashboard you see when you
-    sign in to Moodle. To do that it needs your Moodle password, because Moodle has no other
-    way to let an app act for you.
+  <p class="prose text-sm text-muted mt-3 leading-relaxed">
+    {{ t("MUSAI reads your course list from <code>campusvirtual.uach.mx</code> — the same
+          dashboard you see when you sign in to Moodle. To do that it needs your Moodle
+          password, because Moodle has no other way to let an app act for you.") }}
   </p>
-  <a href="/settings" class="btn btn-clay mt-5">Add my Moodle password</a>
+  <a href="/settings" class="btn btn-clay mt-5">{{ t("Add my Moodle password") }}</a>
   <p class="text-[11px] text-muted mt-3">
-    You choose whether it is stored. Nothing is written to any of your courses by reading them.
+    {{ t("You choose whether it is stored. Nothing is written to any of your courses by
+          reading them.") }}
   </p>
 
   {% else %}
-  <p class="text-sm text-muted mt-3 leading-relaxed">
-    Load them from your Moodle dashboard. MUSAI signs in as
-    <span class="font-mono">{{ professor.email.split('@')[0] }}</span>, reads the courses listed
-    there, and creates them here. It reads only — nothing is written to any course.
+  <p class="prose text-sm text-muted mt-3 leading-relaxed">
+    {{ t("Load them from your Moodle dashboard. MUSAI signs in as <code>{user}</code>, reads
+          the courses listed there, and creates them here. It reads only — nothing is written
+          to any course.", user=professor.email.split('@')[0]) }}
   </p>
   <button class="btn btn-clay mt-5" hx-post="/courses/map"
           hx-target="#map-work" hx-swap="innerHTML"
           hx-on::after-request="window.scrollTo({top:0,behavior:'smooth'})">
-    Load my courses from Moodle
+    {{ t("Load my courses from Moodle") }}
   </button>
-  <p class="text-[11px] text-muted mt-3">Takes about half a minute.</p>
+  <p class="text-[11px] text-muted mt-3">{{ t("Takes about half a minute.") }}</p>
   {% endif %}
 </div>
 {% endif %}

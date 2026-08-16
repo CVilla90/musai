@@ -1,19 +1,23 @@
 {% extends "base.html" %}
 {% set nav_section = 'settings' %}
-{% block title %}MUSAI — Settings{% endblock %}
+{% block title %}MUSAI — {{ t("Settings") }}{% endblock %}
 
 {% block content %}
 <div class="mb-7">
-  <h1 class="font-serif text-3xl font-semibold text-ink">Settings</h1>
-  <p class="text-muted mt-1 text-sm">Signed in as {{ professor.email }}</p>
+  <h1 class="font-serif text-3xl font-semibold text-ink">{{ t("Settings") }}</h1>
+  <p class="text-muted mt-1 text-sm">{{ t("Signed in as {email}", email=professor.email) }}</p>
 </div>
 
+{# The label lives here, next to a literal `t()` the audit can see. The route owns which tabs
+   EXIST; this owns what they are called. #}
+{% set TAB_LABELS = {'passwords': t('Passwords'), 'usage': t('Usage'),
+                     'language': t('Language')} %}
 <div class="flex gap-1 mb-6 border-b border-line">
-  {% for key, label in tabs %}
+  {% for key in tabs %}
   <a href="/settings?tab={{ key }}"
      class="px-4 py-2 text-sm border-b-2 transition
             {% if tab == key %}font-semibold text-ink{% else %}text-muted hover:text-ink border-transparent{% endif %}"
-     {% if tab == key %}style="border-color:#4F46E5"{% endif %}>{{ label }}</a>
+     {% if tab == key %}style="border-color:#4F46E5"{% endif %}>{{ TAB_LABELS[key] }}</a>
   {% endfor %}
 </div>
 
@@ -30,35 +34,36 @@
    passwords into a login form, so it can necessarily read them. A page that implied a hash
    would be lying, and a professor deciding whether to store a password deserves the real
    sentence. #}
-<div class="card p-5 mb-6">
-  <h2 class="text-sm font-semibold text-ink mb-2">What MUSAI does with these</h2>
+<div class="card prose p-5 mb-6">
+  <h2 class="text-sm font-semibold text-ink mb-2">{{ t("What MUSAI does with these") }}</h2>
   <p class="text-sm text-muted leading-relaxed">
-    Moodle has no way to grant an app access on your behalf — no API key, no app password. So
-    to read your course list, make a backup or run a restore <em>as you</em>, MUSAI signs in
-    with your password the same way you do.
+    {{ t("Moodle has no way to grant an app access on your behalf — no API key, no app
+          password. So to read your course list, make a backup or run a restore <em>as
+          you</em>, MUSAI signs in with your password the same way you do.") }}
   </p>
   <p class="text-sm text-muted leading-relaxed mt-2">
-    That means <strong>MUSAI can read these passwords</strong>, and it is worth knowing that
-    before you store one. They are encrypted with a key that lives outside the database, they
-    are never shown back to you or written to any log, and
-    <strong>Delete removes them for good</strong>. Storing them is optional — you can type one
-    in each time instead, and nothing is kept.
+    {{ t("That means <strong>MUSAI can read these passwords</strong>, and it is worth knowing
+          that before you store one. They are encrypted with a key that lives outside the
+          database, they are never shown back to you or written to any log, and <strong>Delete
+          removes them for good</strong>. Storing them is optional — you can type one in each
+          time instead, and nothing is kept.") }}
   </p>
 </div>
 
 {% if not vault_ready %}
-<div class="card p-5 mb-6 border-l-4" style="border-left-color:#F59E0B">
-  <h2 class="text-sm font-semibold text-ink mb-1">Password storage is not set up on this server</h2>
+<div class="card prose p-5 mb-6 border-l-4" style="border-left-color:#F59E0B">
+  <h2 class="text-sm font-semibold text-ink mb-1">
+    {{ t("Password storage is not set up on this server") }}</h2>
   <p class="text-sm text-muted">
-    <code class="bg-paper px-1.5 py-0.5 rounded border border-line">CREDENTIAL_KEY</code>
-    is missing from <code class="bg-paper px-1.5 py-0.5 rounded border border-line">.env</code>,
-    so nothing can be encrypted — and MUSAI will not store a password in the clear instead.
-    Generate one:
+    {{ t("<code>CREDENTIAL_KEY</code> is missing from <code>.env</code>, so nothing can be
+          encrypted — and MUSAI will not store a password in the clear instead. Generate
+          one:") }}
   </p>
   <pre class="text-xs bg-paper border border-line rounded-lg p-3 mt-2 overflow-x-auto"
 >python -c "from musai.security.vault import generate_key; print(generate_key())"</pre>
-  <p class="text-xs text-muted mt-2">
-    Put it in <code>.env</code> and restart fully — <code>--reload</code> does not reread it.
+  <p class="prose text-xs text-muted mt-2">
+    {{ t("Put it in <code>.env</code> and restart fully — <code>--reload</code> does not
+          reread it.") }}
   </p>
 </div>
 {% endif %}
@@ -70,39 +75,41 @@
     <div class="px-5 py-4 border-b border-line flex items-start justify-between gap-4 flex-wrap">
       <div>
         <h2 class="text-sm font-semibold text-ink">{{ c.label }}</h2>
-        <p class="text-xs text-muted mt-0.5">{{ c.why }}</p>
+        <p class="text-xs text-muted mt-0.5">{{ t(c.why) }}</p>
       </div>
       {% if c.stored %}
       <span class="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap"
             style="background:{% if c.last_ok_at %}#E0F5F1;color:#0F766E{% else %}#FBF1E1;color:#78350F{% endif %}">
-        {% if c.last_ok_at %}Stored · works{% else %}Stored · not tested yet{% endif %}
+        {% if c.last_ok_at %}{{ t("Stored · works") }}{% else %}{{ t("Stored · not tested yet") }}{% endif %}
       </span>
       {% else %}
       <span class="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap"
-            style="background:#F1F5F9;color:#64748B">Not stored</span>
+            style="background:#F1F5F9;color:#64748B">{{ t("Not stored") }}</span>
       {% endif %}
     </div>
 
     <div class="px-5 py-4">
       {% if c.stored %}
-      <p class="text-xs text-muted mb-4">
-        Username <span class="font-mono text-ink">{{ c.username }}</span> ·
-        saved {{ c.updated_at.strftime('%d %b %H:%M') if c.updated_at else '—' }}
-        {%- if c.last_ok_at %} · last worked {{ c.last_ok_at.strftime('%d %b %H:%M') }}{% endif %}
+      <p class="prose text-xs text-muted mb-4">
+        {{ t("Username <strong>{user}</strong> · saved {saved}",
+             user=c.username,
+             saved=c.updated_at.strftime('%d %b %H:%M') if c.updated_at else '—') }}
+        {%- if c.last_ok_at %}
+        {{ t("· last worked {when}", when=c.last_ok_at.strftime('%d %b %H:%M')) }}{% endif %}
       </p>
       {% endif %}
 
       <form method="post" action="/settings/passwords/{{ system }}"
             class="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <label class="block">
-          <span class="text-xs text-muted block mb-1">Username</span>
+          <span class="text-xs text-muted block mb-1">{{ t("Username") }}</span>
           <input type="text" name="username" autocomplete="off" required
                  value="{{ c.username or (username_guess if system == 'moodle' else '') }}"
                  class="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm font-mono text-ink" />
         </label>
         <label class="block">
           <span class="text-xs text-muted block mb-1">
-            {% if c.stored %}New password (replaces the stored one){% else %}Password{% endif %}
+            {% if c.stored %}{{ t("New password (replaces the stored one)") }}{% else %}{{ t("Password") }}{% endif %}
           </span>
           {# Write-only. There is no route that returns a stored secret, so this never renders
              a value — not even a masked one, which would only imply one could be fetched. #}
@@ -112,14 +119,15 @@
         </label>
         <button type="submit" class="btn btn-clay h-[38px]"
                 {% if not vault_ready %}disabled style="opacity:.5;cursor:not-allowed"{% endif %}>
-          {% if c.stored %}Replace{% else %}Save{% endif %}
+          {% if c.stored %}{{ t("Replace") }}{% else %}{{ t("Save") }}{% endif %}
         </button>
       </form>
 
       {% if system == 'moodle' %}
-      <p class="text-[11px] text-muted mt-2">
-        Your Moodle username is usually the part of your UACH email before the @ —
-        <span class="font-mono">{{ username_guess }}</span> for you. Change it if yours differs.
+      <p class="prose text-[11px] text-muted mt-2">
+        {{ t("Your Moodle username is usually the part of your UACH email before the @ —
+              <code>{guess}</code> for you. Change it if yours differs.",
+             guess=username_guess) }}
       </p>
       {% endif %}
 
@@ -128,12 +136,14 @@
         {% if system == 'moodle' %}
         <button class="btn btn-ghost" hx-post="/settings/passwords/{{ system }}/test"
                 hx-target="#test-{{ system }}" hx-swap="innerHTML">
-          Test this password
+          {{ t("Test this password") }}
         </button>
         {% endif %}
+        {# 🔴 The last thing between a professor and losing a stored credential, so it says what
+           STOPS working rather than asking "are you sure?". #}
         <form method="post" action="/settings/passwords/{{ system }}/delete"
-              onsubmit="return confirm('Delete the stored {{ c.label }} password? MUSAI will not be able to act on your behalf until you enter it again.')">
-          <button type="submit" class="btn btn-ghost" style="color:#B91C1C">Delete</button>
+              onsubmit="return confirm('{{ t("Delete the stored {label} password? MUSAI will not be able to act on your behalf until you enter it again.", label=c.label) }}')">
+          <button type="submit" class="btn btn-ghost" style="color:#B91C1C">{{ t("Delete") }}</button>
         </form>
       </div>
       <div id="test-{{ system }}" class="mt-4"></div>
@@ -143,9 +153,9 @@
   {% endfor %}
 </div>
 
-<p class="text-xs text-muted mt-6 leading-relaxed">
-  MUSAI signs in to Moodle only as you, and only for your own courses. Every backup and restore
-  is recorded against <span class="font-mono">{{ professor.email }}</span>.
+<p class="prose text-xs text-muted mt-6 leading-relaxed">
+  {{ t("MUSAI signs in to Moodle only as you, and only for your own courses. Every backup and
+        restore is recorded against <code>{email}</code>.", email=professor.email) }}
 </p>
 {% endif %}
 
@@ -159,20 +169,21 @@
   <div class="flex items-baseline justify-between gap-4 flex-wrap">
     <div>
       <h2 class="font-serif text-2xl font-semibold text-ink">
-        {{ money(spend.usd) }} <span class="text-muted font-sans text-base font-normal">used this month</span>
+        {{ money(spend.usd) }} <span class="text-muted font-sans text-base font-normal">{{ t("used this month") }}</span>
       </h2>
-      <p class="text-sm text-muted mt-1">
+      <p class="prose text-sm text-muted mt-1">
         {% if spend.unlimited %}
-          No monthly limit on this account — measured anyway, because an untracked account is
-          the one whose spend nobody notices.
+          {{ t("No monthly limit on this account — measured anyway, because an untracked
+                account is the one whose spend nobody notices.") }}
         {% else %}
-          That is <strong>{{ spend.pct }}%</strong> of your free
-          {{ money(spend.cap_usd) }} — about
-          <strong>{{ spend.remaining_questions }}</strong> more assistant questions.
+          {{ t("That is <strong>{pct}%</strong> of your free {cap} — about <strong>{n}</strong>
+                more assistant questions.",
+               pct=spend.pct, cap=money(spend.cap_usd), n=spend.remaining_questions) }}
         {% endif %}
       </p>
     </div>
-    <p class="text-xs text-muted">Since {{ spend.since }} · resets on the 1st</p>
+    <p class="text-xs text-muted">
+      {{ t("Since {day} · resets on the 1st", day=spend.since) }}</p>
   </div>
 
   {% if not spend.unlimited %}
@@ -187,8 +198,8 @@
   {# ⚠️ Said out loud. A meter that looks like a limit but never stops anything is a lie of
      omission the first time someone plans around it. #}
   <p class="text-xs text-muted mt-3">
-    Nothing is blocked at the limit yet — this is measuring, not enforcing. The daily AI budget
-    is the one that actually stops a runaway.
+    {{ t("Nothing is blocked at the limit yet — this is measuring, not enforcing. The daily AI
+          budget is the one that actually stops a runaway.") }}
   </p>
   {% endif %}
 </div>
@@ -196,27 +207,27 @@
 {# Where it went. #}
 <div class="card overflow-hidden mb-6">
   <div class="px-5 py-4 border-b border-line">
-    <h2 class="text-sm font-semibold text-ink">Where it went</h2>
-    <p class="text-xs text-muted mt-0.5">Last 30 days, dearest first.</p>
+    <h2 class="text-sm font-semibold text-ink">{{ t("Where it went") }}</h2>
+    <p class="text-xs text-muted mt-0.5">{{ t("Last 30 days, dearest first.") }}</p>
   </div>
   {% if by_kind %}
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="text-xs text-muted border-b border-line">
         <tr>
-          <th class="text-left font-medium px-5 py-2">Action</th>
-          <th class="text-right font-medium px-3 py-2">Times</th>
-          <th class="text-right font-medium px-3 py-2">Tokens</th>
-          <th class="text-right font-medium px-3 py-2">Minutes</th>
-          <th class="text-right font-medium px-5 py-2">Cost</th>
+          <th class="text-left font-medium px-5 py-2">{{ t("Action") }}</th>
+          <th class="text-right font-medium px-3 py-2">{{ t("Times") }}</th>
+          <th class="text-right font-medium px-3 py-2">{{ t("Tokens") }}</th>
+          <th class="text-right font-medium px-3 py-2">{{ t("Minutes") }}</th>
+          <th class="text-right font-medium px-5 py-2">{{ t("Cost") }}</th>
         </tr>
       </thead>
       <tbody>
         {% for r in by_kind %}
         <tr class="border-b border-line/60 last:border-0">
           <td class="px-5 py-2.5">
-            <span class="text-ink">{{ r.label }}</span>
-            <span class="block text-xs text-muted">{{ r.blurb }}</span>
+            <span class="text-ink">{{ t(r.label) }}</span>
+            <span class="block text-xs text-muted">{{ t(r.blurb) }}</span>
           </td>
           <td class="px-3 py-2.5 text-right tabular-nums">{{ r.count }}</td>
           <td class="px-3 py-2.5 text-right tabular-nums text-muted">
@@ -234,7 +245,8 @@
   </div>
   {% else %}
   <p class="px-5 py-6 text-sm text-muted">
-    Nothing metered yet. Ask the assistant a question or run a backup and it will show up here.
+    {{ t("Nothing metered yet. Ask the assistant a question or run a backup and it will show
+          up here.") }}
   </p>
   {% endif %}
 </div>
@@ -243,26 +255,28 @@
    it is the difference between "you have spent 12%" and "a restore costs 12%". #}
 <div class="card overflow-hidden mb-6">
   <div class="px-5 py-4 border-b border-line">
-    <h2 class="text-sm font-semibold text-ink">What things cost</h2>
+    <h2 class="text-sm font-semibold text-ink">{{ t("What things cost") }}</h2>
     <p class="text-xs text-muted mt-0.5">
-      Typical, not a promise — a restore takes what Moodle's queue takes.
+      {{ t("Typical, not a promise — a restore takes what Moodle's queue takes.") }}
     </p>
   </div>
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <tbody>
-        {% for t in typical %}
+        {# ⚠️ `row`, not `t`: `t` is the translator global and a loop variable of that name
+           shadows it for the whole block. #}
+        {% for row in typical %}
         <tr class="border-b border-line/60 last:border-0">
           <td class="px-5 py-2.5 text-ink">
-            {{ t.label }}
-            {% if t.note %}<span class="text-xs text-muted"> · {{ t.note }}</span>{% endif %}
+            {{ t(row.label) }}
+            {% if row.note %}<span class="text-xs text-muted"> · {{ t(row.note) }}</span>{% endif %}
           </td>
-          <td class="px-3 py-2.5 text-right tabular-nums text-muted">{{ money(t.usd) }}</td>
+          <td class="px-3 py-2.5 text-right tabular-nums text-muted">{{ money(row.usd) }}</td>
           {# Always expressed against the FREE allowance, even on the unlimited account: the
              owner needs to see what a colleague's month buys, not what his own does. #}
           <td class="px-5 py-2.5 text-right text-xs text-muted whitespace-nowrap">
-            {% if t.per_allowance and t.per_allowance > 1000 %}effectively free
-            {% elif t.per_allowance %}{{ t.per_allowance }} per free month
+            {% if row.per_allowance and row.per_allowance > 1000 %}{{ t("effectively free") }}
+            {% elif row.per_allowance %}{{ t("{n} per free month", n=row.per_allowance) }}
             {% endif %}
           </td>
         </tr>
@@ -270,37 +284,42 @@
       </tbody>
     </table>
   </div>
-  <p class="px-5 py-3 text-xs text-muted border-t border-line leading-relaxed">
-    <strong>Opening pages is not counted.</strong> One page view costs about $0.0000008 —
-    a millionth of a dollar, and one twelve-hundredth of a single assistant question. Recording
-    it would cost more than the page view itself, so MUSAI meters only the two things that
-    actually cost money: <strong>AI answers</strong> and <strong>browser jobs</strong>.
+  <p class="prose px-5 py-3 text-xs text-muted border-t border-line leading-relaxed">
+    {{ t("<strong>Opening pages is not counted.</strong> One page view costs about $0.0000008 —
+          a millionth of a dollar, and one twelve-hundredth of a single assistant question.
+          Recording it would cost more than the page view itself, so MUSAI meters only the two
+          things that actually cost money: <strong>AI answers</strong> and <strong>browser
+          jobs</strong>.") }}
   </p>
 </div>
 
 {# Show the working. A cost the reader cannot check is a number they have to take on faith,
    and this one is an estimate built on two vendors' published rates. #}
 <details class="card p-5 mb-6">
-  <summary class="text-sm font-semibold text-ink cursor-pointer">How this is calculated</summary>
-  <div class="text-sm text-muted mt-3 space-y-2 leading-relaxed">
+  <summary class="text-sm font-semibold text-ink cursor-pointer">
+    {{ t("How this is calculated") }}</summary>
+  <div class="prose text-sm text-muted mt-3 space-y-2 leading-relaxed">
     <p>
-      MUSAI usage is our own number, covering both vendors, so you never have to think about
-      which one a click reached. Rate card <span class="font-mono text-xs">{{ rate_card.version }}</span>:
+      {{ t("MUSAI usage is our own number, covering both vendors, so you never have to think
+            about which one a click reached. Rate card <code>{version}</code>:",
+           version=rate_card.version) }}
     </p>
     <ul class="list-disc pl-5 space-y-1 text-xs">
-      <li><strong>{{ rate_card.model }}</strong> —
-        ${{ '%.2f'|format(rate_card.gemini_in_per_mtok) }} per million tokens in,
-        ${{ '%.2f'|format(rate_card.gemini_out_per_mtok) }} out.</li>
-      <li><strong>Server time</strong> — ${{ '%.2f'|format(rate_card.usd_per_million_cu) }} per
-        million compute units; a {{ rate_card.vcpu }} vCPU / {{ rate_card.gib }} GiB machine
-        burns {{ rate_card.cu_per_second|int }} per second, so
-        ${{ '%.8f'|format(rate_card.usd_per_second) }} a second.</li>
-      <li><strong>Requests</strong> — ${{ '%.2f'|format(rate_card.usd_per_million_requests) }}
-        per million.</li>
+      <li>{{ t("<strong>{model}</strong> — ${in_} per million tokens in, ${out} out.",
+               model=rate_card.model,
+               in_='%.2f'|format(rate_card.gemini_in_per_mtok),
+               out='%.2f'|format(rate_card.gemini_out_per_mtok)) }}</li>
+      <li>{{ t("<strong>Server time</strong> — ${per_mcu} per million compute units; a {vcpu}
+                vCPU / {gib} GiB machine burns {cu} per second, so ${per_s} a second.",
+               per_mcu='%.2f'|format(rate_card.usd_per_million_cu), vcpu=rate_card.vcpu,
+               gib=rate_card.gib, cu=rate_card.cu_per_second|int,
+               per_s='%.8f'|format(rate_card.usd_per_second)) }}</li>
+      <li>{{ t("<strong>Requests</strong> — ${per_m} per million.",
+               per_m='%.2f'|format(rate_card.usd_per_million_requests)) }}</li>
     </ul>
     <p class="text-xs">
-      Each line above is priced when it happens and never re-priced afterwards, so a rate
-      change tomorrow cannot make last month look more expensive than it was.
+      {{ t("Each line above is priced when it happens and never re-priced afterwards, so a
+            rate change tomorrow cannot make last month look more expensive than it was.") }}
     </p>
   </div>
 </details>
@@ -308,7 +327,7 @@
 {% if events %}
 <div class="card overflow-hidden">
   <div class="px-5 py-4 border-b border-line">
-    <h2 class="text-sm font-semibold text-ink">Recent activity</h2>
+    <h2 class="text-sm font-semibold text-ink">{{ t("Recent activity") }}</h2>
   </div>
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
@@ -316,7 +335,7 @@
         {% for e in events %}
         <tr class="border-b border-line/60 last:border-0">
           <td class="px-5 py-2 text-xs text-muted whitespace-nowrap">{{ e.day }}</td>
-          <td class="px-3 py-2 text-ink">{{ e.label }}
+          <td class="px-3 py-2 text-ink">{{ t(e.label) }}
             {% if e.detail %}<span class="text-xs text-muted">· {{ e.detail }}</span>{% endif %}</td>
           <td class="px-3 py-2 text-right text-xs text-muted tabular-nums whitespace-nowrap">
             {% if e.tokens %}{{ '{:,}'.format(e.tokens) }} tok{% endif %}
@@ -329,5 +348,53 @@
   </div>
 </div>
 {% endif %}
+{% endif %}
+
+{# ═══ LANGUAGE ════════════════════════════════════════════════════════════════════════════ #}
+{% if tab == 'language' %}
+<div class="card p-6 mb-6 max-w-2xl">
+  <h2 class="text-sm font-semibold text-ink mb-1">{{ t("Language") }}</h2>
+  <p class="text-sm text-muted leading-relaxed">
+    {{ t("MUSAI in English or Spanish. Your choice is saved to your account, so it follows you
+          to any computer you sign in from.") }}
+  </p>
+
+  <div class="mt-5 grid gap-3 sm:grid-cols-2">
+    {% for code in LANGUAGES %}
+    {# A link, not a form: `/lang/{code}` is the ONE place the choice is written, shared with
+       the nav shortcut and the landing page. Two ways to set a preference is two places for it
+       to end up set differently. #}
+    <a href="/lang/{{ code }}?next=%2Fsettings%3Ftab%3Dlanguage" hreflang="{{ code }}"
+       class="card-flat px-4 py-3 flex items-center justify-between gap-3 transition"
+       {% if stored_language == code %}style="border-color:var(--accent);background:var(--accent-tint)"{% endif %}>
+      <span>
+        <span class="text-sm font-semibold text-ink">{{ LANGUAGE_NAMES[code] }}</span>
+        <span class="block text-xs text-muted uppercase tracking-wide">{{ code }}</span>
+      </span>
+      {% if stored_language == code %}
+      <span class="chip">{{ t("Selected") }}</span>
+      {% elif stored_language is none and code == 'en' %}
+      {# 🔴 The state the nullable column exists to make visible. "Currently showing" is true;
+         "Selected" would not be — nobody selected it — and telling those two apart is what
+         lets the default change one day without overriding a professor who really did choose
+         English. #}
+      <span class="chip chip-quiet">{{ t("Currently showing") }}</span>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if stored_language is none %}
+  <p class="text-xs text-muted mt-4 leading-relaxed">
+    {{ t("You have not chosen yet, so MUSAI is showing you its default. Pick one and it stays
+          picked — including if the default ever changes.") }}
+  </p>
+  {% endif %}
+</div>
+
+<p class="text-xs text-muted leading-relaxed max-w-2xl">
+  {{ t("Only what MUSAI itself says changes. Your courses, activity names, grades and anything
+        Moodle or SEGA sends back stay exactly as they are written there.") }}
+</p>
 {% endif %}
 {% endblock %}

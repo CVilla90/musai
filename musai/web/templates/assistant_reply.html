@@ -8,15 +8,17 @@
     <div class="whitespace-pre-wrap leading-relaxed text-ink">{{ result.answer }}</div>
     {% if result.tools or result.usage %}
     <div class="mt-2 pt-2 border-t border-line flex flex-wrap items-center gap-1.5">
-      {% for t in result.tools %}
-      <span class="text-[10px] font-mono px-1.5 py-0.5 rounded" style="background:#E0F5F1;color:#0F766E">⚙ {{ t }}</span>
+      {# ⚠️ `tool`, not `t`. `t` is the translator global, and a loop variable of that name
+         shadows it for the whole block — every `t("…")` inside would call a string. #}
+      {% for tool in result.tools %}
+      <span class="text-[10px] font-mono px-1.5 py-0.5 rounded" style="background:#E0F5F1;color:#0F766E">⚙ {{ tool }}</span>
       {% endfor %}
       {% if result.usage %}
       {% set u = result.usage %}
       <span class="text-[10px] font-mono px-1.5 py-0.5 rounded ml-auto"
             style="background:{% if u.tokens_pct >= 80 %}#FEE2E2;color:#B91C1C{% else %}#F1F5F9;color:#64748B{% endif %}"
-            title="Today: {{ u.requests }}/{{ u.requests_cap }} requests, {{ u.tokens }}/{{ u.tokens_cap }} tokens">
-        {{ u.tokens }} tok · {{ u.tokens_pct }}% of today
+            title="{{ t('Today: {req}/{req_cap} requests, {tok}/{tok_cap} tokens', req=u.requests, req_cap=u.requests_cap, tok=u.tokens, tok_cap=u.tokens_cap) }}">
+        {{ t("{tok} tok · {pct}% of today", tok=u.tokens, pct=u.tokens_pct) }}
         {%- if u.estimated_usd is not none %} · ~${{ '%.4f'|format(u.estimated_usd) }}{% endif %}
       </span>
       {% endif %}

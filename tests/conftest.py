@@ -60,6 +60,35 @@ if os.environ.get("DATABASE_URL", "").startswith("sqlite"):
 
     SQLModel.metadata.create_all(_engine)
 
+    # …and the same argument one level down, for a COLUMN added to a table that already exists.
+    # `create_all` skips any table it finds, so a new field turns the whole route suite red with
+    # `no such column: professor.language` — 554 tests failing on a database that is simply
+    # older than the model, saying nothing whatsoever about the feature being written.
+    #
+    # ⚠️ Additive only, exactly like `create_all`: a column present in both is never altered, so
+    # this cannot hide a migration that is wrong — only one that has not been applied to the
+    # developer's own copy yet. `alembic upgrade head` is still what runs in production.
+    def _add_missing_columns(engine) -> None:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(engine)
+        existing = set(inspector.get_table_names())
+        with engine.begin() as conn:
+            for table in SQLModel.metadata.sorted_tables:
+                if table.name not in existing:
+                    continue
+                have = {c["name"] for c in inspector.get_columns(table.name)}
+                for column in table.columns:
+                    if column.name in have or column.primary_key:
+                        continue
+                    kind = column.type.compile(engine.dialect)
+                    # NOT NULL cannot be added to a populated table without a default, and a
+                    # test database should never be the place that discovers that.
+                    conn.execute(
+                        text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {kind}'))
+
+    _add_missing_columns(_engine)
+
 
 def test_the_suite_is_not_pointed_at_the_real_dev_database():
     """A guard on the guard. If the redirect above ever stops working, this says so loudly

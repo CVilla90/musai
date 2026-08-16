@@ -121,7 +121,10 @@ def test_every_tab_named_in_frontmatter_is_a_real_tab():
 
     src = Path(app_mod.TEMPLATES_DIR) / "course_base.html"
     body = src.read_text(encoding="utf-8")
-    tabs = {label for label in re.findall(r"\(\s*'[a-z]+',\s*'([A-Za-z]+)'", body)}
+    # ⚠️ The label is inside `t('…')` since the EN/ES release. The ENGLISH label is still the
+    # right thing to match on: `tab:` in the frontmatter is a facet, and the corpus is written
+    # in English — the professor's Spanish tab name comes from the catalogue at render time.
+    tabs = {label for label in re.findall(r"\(\s*'[a-z]+',\s*t\('([A-Za-z]+)'\)", body)}
     assert tabs, "could not read the tab strip out of course_base.html"
 
     extra = {"Settings", "Overview"}          # a real page, not a course tab

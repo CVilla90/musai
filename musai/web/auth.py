@@ -49,7 +49,10 @@ SESSION_MAX_AGE = 60 * 60 * 24 * 7   # a week; a professor should not sign in ev
 #   /auth/…        — the sign-in round trip itself, which by definition runs signed out
 #   /webhook       — SUSAI's Meta callback. 🔴 It authenticates with the Meta app-secret
 #                    signature, NOT a professor session. Gating it would silently kill SUSAI.
-PUBLIC_PREFIXES: tuple[str, ...] = ("/health", "/auth/", "/webhook", "/favicon.ico")
+#   /lang/…        — the EN/ES picker, which the landing page needs signed out. It reads
+#                    nothing and can only store one of two constant strings; see
+#                    `musai/web/language.py::choose` for why that is a narrow enough exemption.
+PUBLIC_PREFIXES: tuple[str, ...] = ("/health", "/auth/", "/webhook", "/favicon.ico", "/lang/")
 
 oauth = OAuth()
 oauth.register(

@@ -26,18 +26,26 @@ def current_professor(request: Request, sess: Session) -> Professor:
     Get-or-create rather than create-only-at-callback, so a session issued before this table
     existed still resolves instead of 500ing — and so the row cannot go missing while a valid
     cookie survives.
+
+    It also pins the render language onto the request while it has the row in hand. Every
+    template calls `t()` and would otherwise have to go and find the professor again; doing it
+    here means the language of a signed-in page costs no query of its own, and means one page
+    is rendered in exactly one language.
     """
     from musai.professors import get_or_create
+    from musai.web import language as lang_mod
 
     user = auth_mod.current_user(request)
     if not user:
         raise HTTPException(401, "Sign in to use MUSAI.")
-    return get_or_create(
+    prof = get_or_create(
         sess,
         email=user["email"],
         full_name=user.get("name") or "",
         picture=user.get("picture") or None,
     )
+    lang_mod.for_professor(request, prof, sess)
+    return prof
 
 
 def owned_course(request: Request, sess: Session, course_id: int) -> tuple[Professor, Course]:

@@ -90,7 +90,9 @@ def test_the_tab_strip_lists_exactly_the_known_tabs():
     import re
 
     source = (TEMPLATES / "course_base.html").read_text(encoding="utf-8")
-    listed = set(re.findall(r"\(\s*'(\w+)',\s*'[^']+',", source))
+    # The tab KEY is the thing that must not drift — it is what `active_tab` is compared
+    # against. The label beside it goes through `t()` and changes with the reader's language.
+    listed = set(re.findall(r"\(\s*'(\w+)',\s*t\('[^']+'\),", source))
     assert listed == TABS, f"course_base.html renders {sorted(listed)}, expected {sorted(TABS)}"
 
 

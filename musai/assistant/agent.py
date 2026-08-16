@@ -38,12 +38,33 @@ SYSTEM = (
     "'final' is the grade that uploads (after curve + extra credit); 'exact' is the raw machine "
     "grade. Be concise and concrete: lead with the answer and the key numbers, and use short "
     "lists when helpful. If something is outside the gradebook data, say so briefly. "
-    "Detect and reply in the user's language (English or Spanish). "
     "ALWAYS finish your turn with a written answer for the professor: after calling tools, "
     "summarize what you found in plain language — never end without a text reply. "
     "If the user does not name a group and only one group exists, use it automatically "
     "(call list_groups to check)."
 )
+
+#: 🔴 The language instruction, and it is deliberately not *"detect and reply in the user's
+#: language"* any more. Detection is per message, so a professor working in Spanish who typed
+#: one English group name got an English answer, and the answer language flickered with the
+#: question. It also disagreed with the screen around it: the page can be Spanish while the
+#: reply is English, and nothing in the app explains why. This follows the professor's stored
+#: choice — the same one the interface follows — so there is exactly one answer to "what
+#: language is MUSAI in?".
+#:
+#: ⚠️ The *question* may still be in either language, and must keep working: a Spanish-speaking
+#: professor pasting an English activity name is normal, not an instruction to switch.
+_REPLY_IN = {
+    "en": "Always reply in English, whatever language the question is written in. ",
+    "es": "Always reply in Spanish (Mexican, informal 'tú'), whatever language the question is "
+          "written in. Keep group codes, activity names, and the names of Moodle and SEGA "
+          "buttons exactly as they are — they are what the professor sees on screen. ",
+}
+
+
+def system_for(lang: str) -> str:
+    """The system prompt for one professor, in the language they chose to read MUSAI in."""
+    return SYSTEM + _REPLY_IN.get(lang, _REPLY_IN["en"])
 
 
 #: 🔴 **Legacy fallback only.** Until 2026-08-16 this literal was the actor for every AI call
@@ -59,8 +80,11 @@ _MESSAGES = {
     "quota": "Gemini says the API quota is exhausted. Check billing/limits in the Google AI "
              "console — MUSAI will not retry automatically.",
     "auth": "Gemini rejected the API key. Check GEMINI_API_KEY in MUSAI/.env.",
-    "not_found": f"The configured model was not found. Check GEMINI_MODEL in .env "
-                 f"(currently '{settings.gemini_model}').",
+    # ⚠️ `{model}` is a placeholder rather than an f-string. Interpolated at import time, the
+    # sentence changes whenever `.env` changes — and since the catalogue is keyed on the English
+    # sentence, editing `GEMINI_MODEL` would silently orphan its translation.
+    "not_found": "The configured model was not found. Check GEMINI_MODEL in .env "
+                 "(currently '{model}').",
     "bad_request": "Gemini rejected the request as malformed — this is a MUSAI bug, not a "
                    "usage problem. Check the logs.",
     "transient": "Gemini had a server-side error and the single retry also failed. Try again "
@@ -80,7 +104,34 @@ _MESSAGES = {
 }
 
 
-def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
+def _say(key: str, lang: str) -> str:
+    """One of MUSAI's own messages, in the professor's language.
+
+    🔴 These are the sentences that appear *instead of* an answer — no key, no budget left,
+    the model fell silent. They are the ones a professor most needs to understand, and they
+    are the ones a translation is most likely to skip, because they live in Python rather than
+    in a template. `musai/i18n/audit.py::python_strings` is what makes forgetting them a red
+    test.
+    """
+    from musai import i18n
+
+    return i18n.translate(_MESSAGES[key], lang, model=settings.gemini_model)
+
+
+def i18n_error(reason: str, lang: str) -> str:
+    """The catch-all for a failure `_MESSAGES` has no sentence for.
+
+    Deliberately keeps the raw `reason` verbatim: it is a diagnostic token like `"safety"` or
+    `"deadline"`, and translating it would make the one string that identifies the fault
+    unsearchable in the logs it came from.
+    """
+    from musai import i18n
+
+    return i18n.translate("Assistant error: {reason}", lang, reason=reason)
+
+
+def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True,
+        lang: str = "en") -> dict:
     """Answer one analytics question. Returns {answer, tools, ok, usage, spend}.
 
     Every call is budget-checked before it spends and accounted after, through
@@ -91,6 +142,9 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
     `actor` is the signed-in professor's email. It defaults to the legacy key so that a
     direct call from a script or a test still books somewhere rather than crashing, but every
     route passes the real one: **the default is a fallback, not the normal path.**
+
+    `lang` is the language the professor reads MUSAI in — it steers both the model's reply and
+    MUSAI's own messages, so the answer never disagrees with the page around it.
     """
     import time
 
@@ -109,7 +163,7 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
             allowed, why = metering.check(sess, actor, is_admin=is_admin)
         sess.commit()
         if not allowed:
-            return {"answer": _MESSAGES[why], "tools": [], "ok": False,
+            return {"answer": _say(why, lang), "tools": [], "ok": False,
                     "usage": bud.summary(sess, actor, is_admin=is_admin),
                     "spend": metering.month_to_date(sess, actor, is_admin=is_admin)}
         # 🔴 Whose data may this turn read? Resolved here, once, from the same string the call
@@ -121,8 +175,8 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
         professor_id = me.id if me else None
 
     t0 = time.monotonic()
-    result = generate(system=SYSTEM, contents=question, tools=tools_for(professor_id),
-                      profile=ASSISTANT)
+    result = generate(system=system_for(lang), contents=question,
+                      tools=tools_for(professor_id), profile=ASSISTANT)
     elapsed = time.monotonic() - t0
 
     with Session(engine) as sess:
@@ -150,7 +204,8 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
                 "usage": usage, "spend": spend}
 
     reason = result.reason or "error"
-    answer = _MESSAGES.get(reason, f"Assistant error: {reason}")
+    answer = (_say(reason, lang) if reason in _MESSAGES
+              else i18n_error(reason, lang))
 
     # A turn that called tools and then fell silent still HAS the data — the model just did not
     # write the sentence. Showing what the tools returned turns a dead end into an answer the

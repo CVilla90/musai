@@ -14,21 +14,26 @@ from musai.web.deps import current_professor
 router = APIRouter()
 
 
-def _me(request: Request) -> tuple[str, bool]:
-    """(email, is_admin) for the signed-in professor — the key every AI call is billed to.
+def _me(request: Request) -> tuple[str, bool, str]:
+    """(email, is_admin, language) for the signed-in professor.
 
     🔴 Resolved here rather than inside `ask()` so the agent stays importable from a script
     with no request. Before 2026-08-16 every call in the app billed the literal `web:carlos`,
     so two professors shared one daily budget and one bill.
+
+    The language rides along for the same reason the email does: the agent must not have to go
+    looking for a request it may not have. `current_professor` has already pinned it.
     """
+    from musai.web import language as lang_mod
+
     with Session(engine) as sess:
         prof = current_professor(request, sess)
-        return prof.email, bool(prof.is_admin)
+        return prof.email, bool(prof.is_admin), lang_mod.current(request)
 
 
 @router.get("/assistant", response_class=HTMLResponse)
 def assistant_page(request: Request):
-    actor, is_admin = _me(request)
+    actor, is_admin, _lang = _me(request)
     with Session(engine) as sess:
         spend = metering.month_to_date(sess, actor, is_admin=is_admin)
     return templates.TemplateResponse("assistant.html", {
@@ -44,8 +49,8 @@ def assistant_page(request: Request):
 
 @router.post("/assistant/ask", response_class=HTMLResponse)
 def assistant_ask(request: Request, q: str = Form(...)):
-    actor, is_admin = _me(request)
-    result = (ask(q.strip(), actor=actor, is_admin=is_admin) if q.strip()
+    actor, is_admin, lang = _me(request)
+    result = (ask(q.strip(), actor=actor, is_admin=is_admin, lang=lang) if q.strip()
               else {"answer": "", "tools": [], "ok": False})
     return templates.TemplateResponse("assistant_reply.html", {
         "request": request, "q": q.strip(), "result": result,

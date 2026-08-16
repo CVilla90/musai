@@ -16,9 +16,18 @@
 
   🔴 Danger red is NOT in the accent rotation. It is a separate variable that never changes, so
   a red button always means the same thing — see DESIGN_DIRECTION §2.1.
+
+  ── Language ────────────────────────────────────────────────────────────────────────────────
+  Every sentence a professor reads goes through `{{ t("…") }}`. The English string IS the key,
+  so this file stays readable and an untranslated string renders in English rather than
+  rendering a key. See `musai/i18n/__init__.py`.
+
+  🔴 `<html lang>` is computed, not typed. It said `es` here and `en` in `landing.html` while
+  both served English — the two disagreed with each other and with the page, which is what
+  makes a screen reader read English prose with Spanish phonetics.
 #}
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ lang() }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -123,6 +132,21 @@
     .eyebrow { font-size:.68rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
                color: var(--muted); }
 
+    /* ── translated prose ─────────────────────────────────────────────────────
+       🔴 A sentence in `musai/i18n/es.py` may carry `<code>`, `<a>`, `<strong>` and `<span
+       class="val">` — because the emphasis and the link often sit mid-clause and Spanish puts
+       that clause somewhere else. What it must NEVER carry is a Tailwind class list: the
+       catalogue key is the English sentence, so `text-[11px] text-muted` inside one means
+       restyling a paragraph silently orphans its translation. Tags in the string, styling
+       here. */
+    .prose code { background: var(--paper); border:1px solid var(--line); border-radius:.3rem;
+                  padding:.08rem .35rem; font-size:.92em;
+                  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .prose a { font-weight:600; color: var(--accent-deep); }
+    .prose a:hover { text-decoration: underline; }
+    .prose strong { font-weight:600; color: var(--ink); }
+    .prose em { font-style: italic; }
+
     .grade-pill { display:inline-flex; align-items:center; justify-content:center;
                   min-width:2.6rem; padding:.15rem .5rem; border-radius:.5rem;
                   font-variant-numeric: tabular-nums; font-weight:600; font-size:.8rem; }
@@ -168,8 +192,9 @@
       <span class="text-[11px] text-muted hidden sm:inline">Moodle&nbsp;·&nbsp;UACH&nbsp;·&nbsp;AI</span>
     </a>
     {% set nav = nav_section | default('courses') %}
-    {% for key, label, href in [('courses', 'Courses', '/'), ('assistant', 'Assistant', '/assistant'),
-                                ('settings', 'Settings', '/settings')] %}
+    {% for key, label, href in [('courses', t('Courses'), '/'),
+                                ('assistant', t('Assistant'), '/assistant'),
+                                ('settings', t('Settings'), '/settings')] %}
     <a href="{{ href }}"
        class="text-sm px-2.5 py-1.5 rounded-lg transition
               {% if nav == key %}text-ink font-semibold bg-white border border-line
@@ -184,14 +209,14 @@
        or it is decoration. #}
     {% if dry_run %}
     <span class="ml-auto chip" style="background:#F2F0E9;color:#55535E;border-color:#E4E0D5"
-          title="No write reaches Moodle or SEGA while this is on.">
+          title="{{ t('No write reaches Moodle or SEGA while this is on.') }}">
       <span class="w-1.5 h-1.5 rounded-full" style="background:#4D7C4A"></span>
-      DRY-RUN · no writes
+      {{ t("DRY-RUN · no writes") }}
     </span>
     {% else %}
     <span class="ml-auto chip" style="background:#FDECEC;color:#B91C1C;border-color:#F5C6C6">
       <span class="w-1.5 h-1.5 rounded-full" style="background:#B91C1C"></span>
-      LIVE · writes enabled
+      {{ t("LIVE · writes enabled") }}
     </span>
     {% endif %}
 
@@ -211,11 +236,11 @@
        style="background:{% if meter.over %}#FDECEC{% elif meter.warn %}#FEF6E7{% else %}#F2F0E9{% endif %};
               color:{% if meter.over %}#B91C1C{% elif meter.warn %}#92400E{% else %}#55535E{% endif %};
               border-color:{% if meter.over %}#F5C6C6{% elif meter.warn %}#F5E0B8{% else %}#E4E0D5{% endif %}"
-       title="{% if meter.unlimited %}No monthly limit on this account — still measured, because an untracked account is the one nobody notices.{% else %}About {{ meter.remaining_questions }} more assistant questions left this month.{% endif %} Resets on the 1st.">
+       title="{% if meter.unlimited %}{{ t('No monthly limit on this account — still measured, because an untracked account is the one nobody notices.') }}{% else %}{{ t('About {n} more assistant questions left this month.', n=meter.remaining_questions) }}{% endif %} {{ t('Resets on the 1st.') }}">
       {% if meter.unlimited %}
-        ${{ '%.4f'|format(meter.usd) }} · no limit
+        {{ t("${usd} · no limit", usd='%.4f'|format(meter.usd)) }}
       {% else %}
-        {{ meter.pct }}% of free usage
+        {{ t("{pct}% of free usage", pct=meter.pct) }}
       {% endif %}
     </a>
     {% endif %}
@@ -236,8 +261,24 @@
       </span>
       {% endif %}
       <span class="text-xs text-muted hidden md:inline" title="{{ me.email }}">{{ me.email }}</span>
+
+      {# ── EN | ES ────────────────────────────────────────────────────────────
+         In the nav as well as in Settings, deliberately. A professor who cannot read the page
+         cannot be asked to find the word "Settings" on it first — and this feature exists
+         precisely for the colleague onboarding without Carlos in the room. Two characters, so
+         it costs the nav almost nothing; the canonical, explained control lives in
+         Settings ▸ Language and this is the shortcut to it. #}
+      <span class="text-[11px] text-muted border-l border-line pl-2 flex items-center gap-1">
+        {% for code in LANGUAGES %}
+        <a href="/lang/{{ code }}?next={{ request.url.path | urlencode }}"
+           title="{{ LANGUAGE_NAMES[code] }}" hreflang="{{ code }}"
+           class="uppercase tracking-wide {% if lang() == code %}font-bold text-ink{% else %}hover:text-ink{% endif %}"
+           >{{ code }}</a>{% if not loop.last %}<span class="opacity-40">·</span>{% endif %}
+        {% endfor %}
+      </span>
+
       <a href="/auth/logout" class="text-xs text-muted hover:text-ink border-l border-line pl-2">
-        Sign out
+        {{ t("Sign out") }}
       </a>
     </div>
     {% endif %}
@@ -261,7 +302,7 @@
     <div class="card px-6 py-5 w-[21rem] max-w-[90vw]">
       <div class="flex items-center gap-3">
         <span class="spin"></span>
-        <span id="loader-msg" class="text-sm font-semibold text-ink">Working…</span>
+        <span id="loader-msg" class="text-sm font-semibold text-ink">{{ t("Working…") }}</span>
       </div>
       <p id="loader-elapsed" class="text-xs text-muted val mt-3"></p>
     </div>
@@ -269,6 +310,13 @@
 
   <script>
     (function () {
+      {# The two strings a professor stares at while waiting. Handed to JS from the catalogue
+         rather than written here: this is the most-read text in the app, and a hard-coded
+         literal in a <script> is exactly the sentence a translation audit walks past. #}
+      const T = {
+        working: {{ t("Working…") | tojson }},
+        slow: {{ t("— browser jobs can take a minute") | tojson }},
+      };
       const loader = document.getElementById("loader");
       const msg = document.getElementById("loader-msg");
       const elapsedEl = document.getElementById("loader-elapsed");
@@ -281,14 +329,14 @@
 
       function showLoader(label) {
         startedAt = Date.now();
-        msg.textContent = label && label !== "true" ? label : "Working…";
+        msg.textContent = label && label !== "true" ? label : T.working;
         elapsedEl.textContent = "0s";
         loader.classList.remove("hidden");
         // The only number on this card, and it measures the one thing the browser can
         // actually see: how long you have been waiting.
         elapsedTimer = setInterval(() => {
           const s = Math.round((Date.now() - startedAt) / 1000);
-          elapsedEl.textContent = s + "s" + (s > 25 ? " — browser jobs can take a minute" : "");
+          elapsedEl.textContent = s + "s" + (s > 25 ? " " + T.slow : "");
         }, 500);
       }
 

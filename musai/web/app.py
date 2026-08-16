@@ -4,8 +4,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
+from markupsafe import Markup
 from sqlmodel import Session, select
 
+from musai import i18n
 from musai.config import settings
 from musai.db import init_db, engine
 from musai.models import Course, Semester
@@ -15,6 +18,7 @@ from musai.semesters import (active_semester, courses_in, ensure_current_semeste
                              resolve_semester, semester_label)
 
 from musai.web import auth as auth_mod
+from musai.web import language as lang_mod
 from musai.web.deps import current_professor
 from musai.web.format import grade_pill_style, grade_colors
 
@@ -24,6 +28,47 @@ templates.env.globals["grade_pill_style"] = grade_pill_style
 templates.env.globals["grade_colors"] = grade_colors
 # Every template can ask who is signed in without each route passing it down.
 templates.env.globals["current_user"] = auth_mod.current_user
+
+
+@pass_context
+def t(ctx, text: str, **params) -> Markup:
+    """`{{ t("Cockpit") }}` — this string, in this request's language.
+
+    A Jinja global rather than something each route passes down, for the same reason
+    `current_user` is one: forty routes remembering to include a translator is forty chances to
+    forget, and the ones that forgot would render English inside an otherwise Spanish page —
+    which reads as a broken translation rather than as a missing wire.
+
+    `@pass_context` is what makes the call site short. The language depends on the request, the
+    request is already in every template context, so the template does not have to say so.
+
+    ⚠️ Returns `Markup`, because a fair number of these sentences carry a `<strong>` around the
+    load-bearing half. That is safe only as long as the catalogue is ours: interpolated values
+    go through `escape()` inside `i18n.translate`, and nothing user-supplied is ever a key.
+    """
+    request = ctx.get("request")
+    lang = lang_mod.current(request) if request is not None else i18n.DEFAULT
+    return Markup(i18n.translate(text, lang, **params))
+
+
+@pass_context
+def lang(ctx) -> str:
+    """The BCP-47 code for `<html lang="…">`.
+
+    🔴 Not a constant, which is what it used to be: `base.html` declared `lang="es"` and served
+    English while `landing.html` declared `lang="en"`, so the two disagreed with each other and
+    both disagreed with the page. That is not cosmetic — it is what makes a screen reader
+    pronounce English prose with Spanish phonetics, and what makes a browser offer to translate
+    a page that is already in the reader's language.
+    """
+    request = ctx.get("request")
+    return lang_mod.current(request) if request is not None else i18n.DEFAULT
+
+
+templates.env.globals["t"] = t
+templates.env.globals["lang"] = lang
+templates.env.globals["LANGUAGES"] = i18n.LANGUAGES
+templates.env.globals["LANGUAGE_NAMES"] = i18n.LANGUAGE_NAMES
 
 
 def usage_meter(request: Request):
@@ -162,6 +207,7 @@ from musai.web import (routes_assistant, routes_build, routes_course,  # noqa: E
                        routes_settings, routes_transfer)
 from musai.susai import webhook as susai_webhook  # noqa: E402
 app.include_router(auth_mod.router)
+app.include_router(lang_mod.router)
 app.include_router(routes_settings.router)
 app.include_router(routes_transfer.router)
 app.include_router(routes_course.router)

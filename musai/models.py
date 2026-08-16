@@ -40,6 +40,11 @@ class Professor(SQLModel, table=True):
     picture: Optional[str] = None
     is_admin: bool = Field(default=False)
     is_coordinator: bool = Field(default=False)
+    # 🔴 Nullable, and `None` means "never chose" — NOT "chose English". Same distinction as
+    # `Course.professor_id` above, and it exists for the same reason: so the default can change
+    # without silently overriding everyone who actually made a choice. See
+    # `musai/web/language.py`.
+    language: Optional[str] = Field(default=None)     # "en" | "es" | None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_seen_at: datetime = Field(default_factory=datetime.utcnow)
 

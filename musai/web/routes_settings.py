@@ -32,7 +32,13 @@ router = APIRouter(tags=["settings"])
 
 #: Settings tabs, in nav order. A tab not listed here cannot be reached by URL — `_page`
 #: falls back to the first — so a typo in a link lands on a real page instead of a blank one.
-TABS = [("passwords", "Passwords"), ("usage", "Usage")]
+#:
+#: ⚠️ Keys only, and the template owns what each one is CALLED. The keys are URL values
+#: (`/settings?tab=usage`) that a professor may have bookmarked and that `docs/help/` cites, so
+#: they stay English forever; the labels have to be translated, and a label translated here
+#: would have to go through `t(variable)` in the template — which the translation audit cannot
+#: see, so it would render English on a Spanish page with every check still green.
+TABS = ("passwords", "usage", "language")
 
 
 def _templates():
@@ -42,8 +48,8 @@ def _templates():
 
 
 def _page(request: Request, *, notice: str = "", error: str = "", tab: str = "passwords"):
-    if tab not in dict(TABS):
-        tab = TABS[0][0]
+    if tab not in TABS:
+        tab = TABS[0]
     with Session(engine) as sess:
         prof = current_professor(request, sess)
         status = prof_store.credential_status(sess, prof.id)
@@ -72,6 +78,10 @@ def _page(request: Request, *, notice: str = "", error: str = "", tab: str = "pa
             "rate_card": metering.rate_card(),
             "typical": metering.typical_costs(prof.is_admin),
             "recent_checks": jobs.recent(owner=prof.email, kind=jobs.CREDENTIAL_CHECK, limit=3),
+            # 🔴 The RAW column, not the resolved language. The Language tab has to be able to
+            # say "you have never chosen" — which is a different state from "you chose
+            # English", and the only one from which a future change of default may move you.
+            "stored_language": prof.language,
         },
     )
 

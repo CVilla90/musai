@@ -27,7 +27,9 @@ Three properties worth stating plainly, because each one is a way this could hav
 """
 from __future__ import annotations
 
+import logging
 import re
+import time
 from urllib.parse import quote
 
 from authlib.integrations.starlette_client import OAuth
@@ -158,22 +160,60 @@ def _safe_next(raw: str | None) -> str:
 # Routes
 # ---------------------------------------------------------------------------
 
+#: Sign-in felt like it took "a minute or more", and every component measurable from the
+#: server is fast: `/auth/login` answers in ~0.4 s, Google's discovery doc, token endpoint and
+#: JWKS all answer in ~0.1–0.3 s, importing the app costs ~1.1 s, and the signed-in cockpit
+#: renders in ~9 ms. That rules out this process and leaves exactly one unmeasured span — the
+#: browser's trip to Google and back, which includes the account chooser, any consent or
+#: unverified-app interstitial, and the human choosing a row.
+#:
+#: ⭐ So it is measured rather than guessed. `/auth/login` stamps the session; the callback
+#: reports the split. A number attributed to a remote system without an instrument pointed at
+#: it is a hypothesis, and this project has paid for that mistake before.
+#: ⚠️ Deliberately `uvicorn.error` and not `musai.auth.timing`. A logger of our own propagates
+#: to a root logger uvicorn never attaches a handler to, so the line is formatted and then
+#: dropped — the instrument reads as "sign-in is instrumented" while printing nothing. This is
+#: the logger the server itself writes through, so the numbers land in the console being read.
+_log = logging.getLogger("uvicorn.error")
+
+
 @router.get("/login")
 async def login(request: Request):
     if not settings.auth_configured:
         raise HTTPException(503, f"Sign-in is not configured: {', '.join(missing_config())}")
+    t0 = time.monotonic()
     request.session["next"] = _safe_next(request.query_params.get("next"))
-    return await oauth.google.authorize_redirect(
+    request.session["_t_login"] = time.time()
+    resp = await oauth.google.authorize_redirect(
         request, _redirect_uri(request), hd=settings.allowed_email_domain or None
     )
+    _log.info("sign-in ▸ /auth/login built the redirect in %.0f ms", (time.monotonic() - t0) * 1000)
+    return resp
 
 
 @router.get("/google/callback")
 async def callback(request: Request):
+    t_cb = time.monotonic()
+    t_login = request.session.pop("_t_login", None)
+    away = (time.time() - t_login) if t_login else None
+
+    t_tok = time.monotonic()
     try:
         token = await oauth.google.authorize_access_token(request)
     except Exception:
         return RedirectResponse(url="/?auth_error=oauth")
+    tok_ms = (time.monotonic() - t_tok) * 1000
+
+    _log.info(
+        "sign-in ▸ AWAY AT GOOGLE %s | token exchange %.0f ms | callback total %.0f ms",
+        f"{away:.1f} s" if away is not None else "unknown (no /auth/login stamp)",
+        tok_ms, (time.monotonic() - t_cb) * 1000,
+    )
+    if away is not None and away > 5:
+        _log.warning(
+            "sign-in ▸ %.1f s of the wait was the browser at Google, not MUSAI. If the consent "
+            "screen appeared, check the OAuth app's publishing status — an app still in Testing "
+            "shows an unverified-app interstitial on every single sign-in.", away)
 
     info = token.get("userinfo") or {}
     email, refusal = _gate(info)

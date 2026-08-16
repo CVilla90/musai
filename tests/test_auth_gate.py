@@ -85,8 +85,14 @@ def test_a_uach_account_passes_the_gate():
 
 
 def test_a_non_uach_account_is_refused():
-    """🔴 the owner's instruction, 2026-08-13: only @uach.mx. No allow-list, no exceptions."""
-    _, refusal = auth._gate({"email": "carlosavillah90@gmail.com", "email_verified": True})
+    """🔴 the owner's instruction, 2026-08-13: only @uach.mx.
+
+    His 2026-08-16 instruction added exactly one exception — `ADMIN_RECOVERY_EMAILS`, tested
+    below — and nothing else moved. With that list empty, which is how it ships and how the
+    suite always sees it (`conftest._auth_secrets_are_fake`), this is the 2026-08-13 rule
+    unchanged.
+    """
+    _, refusal = auth._gate({"email": "someone@gmail.com", "email_verified": True})
     assert refusal == "domain"
 
 

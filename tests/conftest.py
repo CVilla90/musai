@@ -90,6 +90,15 @@ def _auth_secrets_are_fake(monkeypatch):
     monkeypatch.setattr(_settings, "allowed_email_domain", "uach.mx")
     monkeypatch.setattr(_settings, "admin_email", "professor@uach.mx")
     monkeypatch.setattr(_settings, "app_base_url", "")
+    # 🔴 The same trap one layer further in, added 2026-08-16 with the recovery door. These
+    # three are EMPTY in the repo and will not be on the owner's machine. Left unpinned, the
+    # day he sets `ADMIN_RECOVERY_EMAILS=carlosavillah90@gmail.com` in `.env`, the test named
+    # "a non-UACH account is refused" starts passing that very address — and the suite reports
+    # the gate as sealed while `.env` is the only thing holding it. A test that wants the
+    # configured case sets it explicitly with its own monkeypatch.
+    monkeypatch.setattr(_settings, "admin_recovery_emails", "")
+    monkeypatch.setattr(_settings, "break_glass_email", "")
+    monkeypatch.setattr(_settings, "break_glass_password_hash", "")
 
 
 @pytest.fixture(autouse=True)

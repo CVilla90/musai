@@ -17,6 +17,10 @@ python-dotenv==1.0.1
 # so there is no server-side session store and the app stays Autoscale-friendly.
 authlib==1.3.2
 itsdangerous==2.2.0
+# Fernet, for musai/security/vault.py. Pinned explicitly rather than relying on authlib
+# pulling it in: MUSAI imports it DIRECTLY, and a transitive dependency that a future authlib
+# release drops would take every stored professor credential offline with it.
+cryptography==49.0.0
 
 # Data (Moodle export parsing)
 pandas==2.2.3

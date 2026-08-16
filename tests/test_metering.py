@@ -315,3 +315,32 @@ def test_a_signed_out_visitor_gets_no_meter_and_no_crash():
     r = TestClient(app, follow_redirects=False).get("/")
     assert r.status_code == 200
     assert "of free usage" not in r.text
+
+
+# ── what the app is used FOR ──────────────────────────────────────────────────
+def test_an_analyst_row_records_which_tools_ran_not_the_question(sess, monkeypatch):
+    """⭐ The only record of what professors use the assistant for, and it cannot be
+    backfilled — a question not classified when it was asked is gone.
+
+    🔴 Tool names, never the question text. `student_status` says someone looked a student up
+    without keeping a word of what they typed. Storing the question would answer the same
+    product question and make every professor's phrasing readable by whoever opens the admin
+    panel; this is the version that does not have to be walked back later.
+    """
+    from musai.ai.gemini import AiResult
+    from musai.analyst import agent
+
+    monkeypatch.setattr(agent, "ACTOR", "prof@uach.mx")
+    monkeypatch.setattr(
+        "musai.ai.gemini.generate",
+        lambda **kw: AiResult(ok=True, text="1-LED-A is at 7.8.", tools=["student_status"],
+                              tokens_in=1400, tokens_out=200,
+                              model="gemini-3.5-flash-lite"))
+    monkeypatch.setattr("musai.db.engine", sess.get_bind())
+
+    out = agent.ask("how is she doing?", actor="prof@uach.mx", is_admin=True)
+    assert out["ok"] is True
+
+    row = sess.exec(select(UsageEvent).where(UsageEvent.kind == "analyst")).first()
+    assert row.detail == "student_status"
+    assert "how is she doing" not in row.detail

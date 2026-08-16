@@ -103,7 +103,16 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
         bud.record(sess, actor, result)
         # Billed even when the answer was empty: the tokens were spent either way, and a
         # ledger that only records successes understates exactly the runs worth noticing.
+        #
+        # ⭐ `detail` carries the TOOL NAMES, not the question. It is the only record of what
+        # professors actually use the assistant for, and it cannot be reconstructed later — a
+        # question not classified when it was asked is gone. Tool names are the honest way to
+        # get that: `student_status` says someone looked a student up without keeping a word
+        # of what they typed, so the admin panel can answer "what is this app used for?"
+        # without anyone's questions being readable. Storing the question text would be the
+        # easy version and the wrong one.
         metering.record(sess, actor, "analyst", seconds=elapsed,
+                        detail=",".join(result.tools),
                         tokens_in=result.tokens_in, tokens_out=result.tokens_out,
                         model=result.model or "")
         sess.commit()

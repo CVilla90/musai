@@ -128,6 +128,66 @@ def test_several_addresses_can_be_listed(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Reaching the account chooser at all
+# ---------------------------------------------------------------------------
+#
+# 🔴 The bug that made every test above true and the feature still unusable, found by Carlos
+# on 2026-08-16: the gate accepted his Gmail, and Google never offered it as a row to click.
+# `hd=uach.mx` on the authorize URL filters the account chooser. It is documented everywhere —
+# including in this file — as "only a UI hint, not a gate", which is true and was exactly the
+# wrong thing to take comfort in: a login you cannot SELECT is as unusable as one that refuses.
+
+def test_the_normal_sign_in_still_filters_the_chooser_to_the_domain():
+    kw = auth.authorize_kwargs(any_account=False)
+    assert kw["hd"] == "uach.mx"
+    assert "prompt" not in kw, "the everyday sign-in should not re-prompt for an account"
+
+
+def test_the_recovery_sign_in_sends_no_domain_hint():
+    """No `hd` — otherwise the recovery address is filtered out of the chooser."""
+    kw = auth.authorize_kwargs(any_account=True)
+    assert "hd" not in kw
+
+
+def test_the_recovery_sign_in_forces_the_chooser_open():
+    """⚠️ Without `prompt=select_account` Google silently reuses the account the browser is
+    already signed into — on the owner's machine, the institutional one he is getting around."""
+    assert auth.authorize_kwargs(any_account=True)["prompt"] == "select_account"
+
+
+def test_the_wider_chooser_is_ignored_when_there_is_nothing_to_reach():
+    """`?any=1` with no recovery address configured can only surface accounts the gate is
+    about to refuse — an offer of a door onto a wall. Ignored rather than honoured."""
+    assert auth.wants_any_account("1") is False
+
+
+def test_the_wider_chooser_is_honoured_once_an_address_is_listed(listed):
+    for yes in ("1", "true", "yes"):
+        assert auth.wants_any_account(yes) is True
+    for no in (None, "", "0", "no", "maybe"):
+        assert auth.wants_any_account(no) is False
+
+
+def test_the_recovery_path_is_never_linked_from_the_landing_page():
+    """🔴 The owner's instruction, 2026-08-16: nobody else should learn this door exists.
+
+    The landing page promises every colleague who reads it *"only @uach.mx accounts"*, and it
+    is the one page a stranger sees. A link never exposed the ADDRESS — Google's chooser only
+    lists accounts signed into the visitor's own browser — but it advertised the door, and an
+    unlisted URL is what keeps that promise true as written rather than approximately.
+
+    Asserted against the template SOURCE, so re-adding the link fails here rather than being
+    noticed by whoever it was hidden from.
+    """
+    from pathlib import Path
+
+    src = Path(auth.__file__).resolve().parent / "templates" / "landing.html"
+    body = src.read_text(encoding="utf-8")
+    assert "any=1" not in body.replace("`/auth/login?any=1`", ""), (
+        "The landing page links the recovery sign-in. It is meant to be unlisted.")
+
+
+# ---------------------------------------------------------------------------
 # It does not widen who is an admin
 # ---------------------------------------------------------------------------
 

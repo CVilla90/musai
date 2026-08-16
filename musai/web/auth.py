@@ -246,6 +246,42 @@ def _safe_next(raw: str | None) -> str:
 _log = logging.getLogger("uvicorn.error")
 
 
+def wants_any_account(raw: str | None) -> bool:
+    """Should `/auth/login` open the chooser to every Google account?
+
+    `?any=1`, but **only when a recovery address exists to reach**. With none configured a
+    wider chooser can do nothing except surface accounts `_gate()` is about to refuse — an
+    offer of a door onto a wall, and one more way to end up staring at a refusal page
+    wondering which of the two rules rejected you.
+    """
+    return raw in ("1", "true", "yes") and bool(settings.recovery_addresses)
+
+
+def authorize_kwargs(*, any_account: bool) -> dict:
+    """What to send Google on the authorize URL. Pure, so the choice below is testable.
+
+    🔴 `hd` is a **UI hint, not a gate** — and the half of that sentence that matters in
+    practice is the first half. It does not secure anything (a hand-built authorize URL ignores
+    it, which is why `_gate()` re-checks server-side), but it *does* filter Google's account
+    chooser: with `hd=uach.mx` a personal Gmail is **not offered as a row to click.** So a
+    recovery address could pass the gate and still be unreachable, because the owner never gets
+    a chance to select it. Measured the hard way on 2026-08-16: the allow-list was correct, the
+    login worked, and the account simply was not on the screen.
+
+    ⚠️ Note what `hd` does *not* do: `a227222@uach.mx` is `@uach.mx`, so the filter never hid
+    the owner's student account either. Its only real effect was hiding exactly the addresses
+    the recovery path needs.
+
+    `any_account` therefore drops the hint and forces the chooser open with
+    `prompt=select_account` — otherwise Google silently reuses whichever account the browser is
+    already signed into, which on the owner's machine is the institutional one he is trying to
+    get around.
+    """
+    if any_account:
+        return {"prompt": "select_account"}
+    return {"hd": settings.allowed_email_domain or None}
+
+
 @router.get("/login")
 async def login(request: Request):
     if not settings.auth_configured:
@@ -253,8 +289,11 @@ async def login(request: Request):
     t0 = time.monotonic()
     request.session["next"] = _safe_next(request.query_params.get("next"))
     request.session["_t_login"] = time.time()
+    any_account = wants_any_account(request.query_params.get("any"))
+    if any_account:
+        _log.info("sign-in ▸ recovery chooser requested — sending no `hd` hint")
     resp = await oauth.google.authorize_redirect(
-        request, _redirect_uri(request), hd=settings.allowed_email_domain or None
+        request, _redirect_uri(request), **authorize_kwargs(any_account=any_account)
     )
     _log.info("sign-in ▸ /auth/login built the redirect in %.0f ms", (time.monotonic() - t0) * 1000)
     return resp

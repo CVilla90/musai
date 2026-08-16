@@ -529,6 +529,12 @@ footer .sep{ margin-left:auto; }
         Sign in with Google
       </a>
       <p class="gate">Only <b>@{{ allowed_domain }}</b> accounts. Students never sign in here.</p>
+      {# 🔴 There is deliberately NO link to `/auth/login?any=1` here. The owner's instruction,
+         2026-08-16: the recovery path is his alone and nobody else should learn it exists.
+         A visible link never exposed the ADDRESS — Google's chooser only lists accounts signed
+         into the visitor's own browser — but it advertised the DOOR, and this page is also the
+         one that promises "@uach.mx only" to every colleague who reads it. An unlisted URL
+         keeps that sentence true as written. The URL is documented in AUTH_SETUP.md. #}
       {% else %}
       <span class="gbtn" aria-disabled="true">
         <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false" style="opacity:.35">

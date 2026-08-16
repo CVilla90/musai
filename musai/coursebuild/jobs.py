@@ -93,11 +93,15 @@ def get_job(job_id: int) -> dict | None:
 
 
 def _run(job_id: int, course_id: int, html: str, section: int, dry_run: bool,
-         target: str = LABEL, overwrite_foreign: bool = False) -> None:
+         target: str = LABEL, overwrite_foreign: bool = False, owner: str = "") -> None:
+    import time
+
+    from musai import metering
     from musai.coursebuild.publish import publish_for_course
     from musai.coursebuild.publish_section import publish_summary_for_course
 
     _update(job_id, status="running", step="Starting the browser…")
+    t0 = time.monotonic()
     try:
         with Session(engine, expire_on_commit=False) as sess:
             course = sess.get(Course, course_id)
@@ -131,6 +135,13 @@ def _run(job_id: int, course_id: int, html: str, section: int, dry_run: bool,
         _update(job_id, status="failed", finished_at=datetime.utcnow(),
                 step=f"ERROR: {message}",
                 result={"ok": False, "error": message, "traceback": tb})
+    finally:
+        # Billed in `finally` and to the OWNER, not to a constant: a publish that dies halfway
+        # still held the browser for as long as it ran. `record_safely` swallows its own
+        # failures — an accounting error must never be reported as a failed course write.
+        if owner:
+            metering.record_safely(owner, "course_publish", seconds=time.monotonic() - t0,
+                                   detail=target)
 
 
 def start_publish(course_id: int, html: str, section: int, dry_run: bool,
@@ -140,7 +151,7 @@ def start_publish(course_id: int, html: str, section: int, dry_run: bool,
     job_id = create_job(course_id, html, section, dry_run, target, overwrite_foreign, owner)
     t = threading.Thread(
         target=_run,
-        args=(job_id, course_id, html, section, dry_run, target, overwrite_foreign),
+        args=(job_id, course_id, html, section, dry_run, target, overwrite_foreign, owner),
         daemon=True, name=f"publish-{job_id}",
     )
     t.start()

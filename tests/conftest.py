@@ -49,6 +49,17 @@ import musai.models  # noqa: F401,E402
 from musai.automation import credentials as _credentials  # noqa: E402
 from musai.config import settings as _settings  # noqa: E402
 
+# 🔴 The copy above is a snapshot of a database that is migrated by hand, so it is always
+# some number of migrations behind `musai.models`. Adding one model used to turn the whole
+# route suite red with `no such table` — a failure that says nothing about the code and sends
+# you looking for a bug in the feature you just wrote. `create_all` only ADDS what is missing;
+# it never touches an existing table, so this cannot mask a migration that is genuinely wrong.
+# The migration itself is still required — `alembic upgrade head` is what Postgres will run.
+if os.environ.get("DATABASE_URL", "").startswith("sqlite"):
+    from musai.db import engine as _engine  # noqa: E402
+
+    SQLModel.metadata.create_all(_engine)
+
 
 def test_the_suite_is_not_pointed_at_the_real_dev_database():
     """A guard on the guard. If the redirect above ever stops working, this says so loudly

@@ -30,7 +30,13 @@ SYSTEM = (
 )
 
 
-ACTOR = "web:carlos"  # single-user cockpit today; becomes the signed-in professor later
+#: 🔴 **Legacy fallback only.** Until 2026-08-16 this literal was the actor for every AI call
+#: in the app, which meant every professor shared one budget and one bill: the first colleague
+#: to sign in would spend the owner's daily tokens and appear in his usage. `routes_build.py`
+#: was resolving `current_professor(...).email` two lines above using this constant instead.
+#: Callers now pass `actor=`; this remains only so rows written before the fix still resolve
+#: and so `hub_store.DEFAULT_OWNER` keeps matching something real.
+ACTOR = "web:carlos"
 
 _MESSAGES = {
     "no_key": "No Gemini API key set (GEMINI_API_KEY in MUSAI/.env). The analyst is offline.",
@@ -53,38 +59,60 @@ _MESSAGES = {
     "daily_tokens": "Today's AI token budget for this account is used up. It resets tomorrow.",
     "daily_requests": "Today's AI request budget for this account is used up. It resets "
                       "tomorrow.",
+    "monthly_allowance": "This month's free MUSAI usage is used up. It resets on the 1st — "
+                         "see Settings ▸ Usage for where it went.",
 }
 
 
-def ask(question: str) -> dict:
-    """Answer one analytics question. Returns {answer, tools, ok, usage}.
+def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
+    """Answer one analytics question. Returns {answer, tools, ok, usage, spend}.
 
     Every call is budget-checked before it spends and accounted after, through
-    `musai.ai.budget`. Failures are named, and none of them are retried here — the single
-    permitted retry lives inside `ai.gemini.generate`.
+    `musai.ai.budget` (the daily cap) and `musai.metering` (the monthly bill). Failures are
+    named, and none of them are retried here — the single permitted retry lives inside
+    `ai.gemini.generate`.
+
+    `actor` is the signed-in professor's email. It defaults to the legacy key so that a
+    direct call from a script or a test still books somewhere rather than crashing, but every
+    route passes the real one: **the default is a fallback, not the normal path.**
     """
+    import time
+
     from sqlmodel import Session
 
+    from musai import metering
     from musai.ai import budget as bud
     from musai.ai.gemini import ANALYST, generate
     from musai.db import engine
 
     with Session(engine) as sess:
-        allowed, why = bud.check(sess, ACTOR, is_admin=True)
+        allowed, why = bud.check(sess, actor, is_admin=is_admin)
+        if allowed:
+            allowed, why = metering.check(sess, actor, is_admin=is_admin)
         sess.commit()
         if not allowed:
             return {"answer": _MESSAGES[why], "tools": [], "ok": False,
-                    "usage": bud.summary(sess, ACTOR, is_admin=True)}
+                    "usage": bud.summary(sess, actor, is_admin=is_admin),
+                    "spend": metering.month_to_date(sess, actor, is_admin=is_admin)}
 
+    t0 = time.monotonic()
     result = generate(system=SYSTEM, contents=question, tools=TOOLS, profile=ANALYST)
+    elapsed = time.monotonic() - t0
 
     with Session(engine) as sess:
-        bud.record(sess, ACTOR, result)
+        bud.record(sess, actor, result)
+        # Billed even when the answer was empty: the tokens were spent either way, and a
+        # ledger that only records successes understates exactly the runs worth noticing.
+        metering.record(sess, actor, "analyst", seconds=elapsed,
+                        tokens_in=result.tokens_in, tokens_out=result.tokens_out,
+                        model=result.model or "")
         sess.commit()
-        usage = bud.summary(sess, ACTOR, is_admin=True)
+        usage = bud.summary(sess, actor, is_admin=is_admin)
+        spend = metering.month_to_date(sess, actor, is_admin=is_admin)
 
     if result.ok:
-        return {"answer": result.text, "tools": result.tools, "ok": True, "usage": usage}
+        return {"answer": result.text, "tools": result.tools, "ok": True,
+                "usage": usage, "spend": spend}
 
     reason = result.reason or "error"
     answer = _MESSAGES.get(reason, f"Analyst error: {reason}")
@@ -97,4 +125,5 @@ def ask(question: str) -> dict:
         answer = f"{result.last_tool_result}\n\n({answer})"
 
     # An empty answer still cost tokens, so surface it as a soft failure, not a hard one.
-    return {"answer": answer, "tools": result.tools, "ok": reason == "empty", "usage": usage}
+    return {"answer": answer, "tools": result.tools, "ok": reason == "empty",
+            "usage": usage, "spend": spend}

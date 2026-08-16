@@ -12,8 +12,8 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
+from musai import metering
 from musai.ai import budget as bud
-from musai.analyst.agent import ACTOR
 from musai.config import settings
 from musai.coursebuild import jobs
 from musai.coursebuild.compose import compose
@@ -40,10 +40,14 @@ def _course(request: Request, sess: Session, course_id: int) -> Course:
 def build_page(request: Request, course_id: int):
     with Session(engine, expire_on_commit=False) as sess:
         course = _course(request, sess, course_id)
-        usage = bud.summary(sess, ACTOR, is_admin=True)
+        prof = current_professor(request, sess)
+        usage = bud.summary(sess, prof.email, is_admin=prof.is_admin)
+        spend = metering.month_to_date(sess, prof.email, is_admin=prof.is_admin)
     return templates.TemplateResponse("course_build.html", {
         "request": request, "dry_run": settings.dry_run, "course": course,
-        "sections": SECTIONS, "palettes": sorted(PALETTES), "usage": usage,
+        "sections": SECTIONS, "palettes": sorted(PALETTES), "usage": usage, "spend": spend,
+        "compose_cost": metering.price_micro_usd(
+            requests=1, seconds=6.0, tokens_in=2500, tokens_out=900),
     })
 
 
@@ -51,24 +55,37 @@ def build_page(request: Request, course_id: int):
 def build_preview(request: Request, course_id: int, prompt: str = Form(...),
                   section: int = Form(0), lucky: str = Form(""), live: str = Form("")):
     """Compose a block and render it. With `lucky`, publish straight away (dry-run honored)."""
+    import time
+
     with Session(engine, expire_on_commit=False) as sess:
         course = _course(request, sess, course_id)
-        owner = current_professor(request, sess).email
-        allowed, why = bud.check(sess, ACTOR, is_admin=True)
+        prof = current_professor(request, sess)
+        owner, is_admin = prof.email, bool(prof.is_admin)
+        allowed, why = bud.check(sess, owner, is_admin=is_admin)
+        if allowed:
+            allowed, why = metering.check(sess, owner, is_admin=is_admin)
         sess.commit()
 
     if not allowed:
+        reached = ("This month's free MUSAI usage" if why == "monthly_allowance"
+                   else f"Daily AI budget ({why})")
         return templates.TemplateResponse("course_build_result.html", {
             "request": request, "course": course, "section": section,
-            "error": f"Daily AI budget reached ({why}). It resets tomorrow.",
+            "error": f"{reached} is used up. See Settings ▸ Usage.",
         })
 
+    t0 = time.monotonic()
     out = compose(prompt.strip(), course_label=f"{course.group_code} ({course.subject})"
                   if course else "")
+    elapsed = time.monotonic() - t0
     with Session(engine) as sess:
-        bud.record(sess, ACTOR, out["result"])
+        bud.record(sess, owner, out["result"])
+        metering.record(sess, owner, "build_compose", seconds=elapsed,
+                        detail=course.group_code if course else "",
+                        tokens_in=out["result"].tokens_in, tokens_out=out["result"].tokens_out,
+                        model=getattr(out["result"], "model", "") or "")
         sess.commit()
-        usage = bud.summary(sess, ACTOR, is_admin=True)
+        usage = bud.summary(sess, owner, is_admin=is_admin)
 
     if not out["ok"]:
         return templates.TemplateResponse("course_build_result.html", {

@@ -429,6 +429,44 @@ class AiUsage(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class UsageEvent(SQLModel, table=True):
+    """One priced action — the receipt line behind the Usage tab.
+
+    Distinct from ``AiUsage``, which is a per-day *counter* enforcing the daily cap. This is an
+    itemised ledger: one row per thing the professor did that cost money, so "where did my
+    allowance go?" is answerable by kind and by day rather than as a single total.
+
+    🔴 **``micro_usd`` is computed when the event happens and never recomputed.** Gemini's
+    3.6/3.7 introductory price doubles on 2027-01-01 and Replit's rates move on their own
+    schedule, so a ledger that re-prices history at today's card would report that last month
+    got more expensive while nobody did anything. The receipt is the record; the rate card is
+    not. ``rate_card`` names the version that priced this row, so an old number can always be
+    explained.
+
+    Integer millionths of a dollar, not a float: the whole point of the number is a percentage
+    of a $0.10 budget, which is exactly the magnitude where accumulated float error surfaces.
+
+    ⚠️ Only actions that cost something measurable are written here — AI calls and browser
+    jobs. A page view costs $0.0000008, and a row per page view would cost more to store than
+    the view it measures. See `musai/metering.py`.
+    """
+    __tablename__ = "usage_event"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    actor: str = Field(index=True)       # the signed-in professor's email, or wa:<phone>
+    day: date = Field(index=True)        # local day, for monthly rollups without TZ surprises
+    kind: str = Field(index=True)        # "analyst" | "course_restore" | …
+    detail: str = Field(default="")      # free text for the tab, e.g. a group code
+    tokens_in: int = Field(default=0)
+    tokens_out: int = Field(default=0)
+    model: str = Field(default="")       # which model priced the tokens
+    seconds: float = Field(default=0.0)  # wall-clock of the work, for compute
+    requests: int = Field(default=1)
+    micro_usd: int = Field(default=0)    # millionths of a USD, priced at event time
+    rate_card: str = Field(default="")   # rate-card version that produced micro_usd
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class JobRequest(SQLModel, table=True):
     """Phase 4: cockpit → local runner job queue."""
     __tablename__ = "job_request"

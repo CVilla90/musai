@@ -9,9 +9,12 @@
 </div>
 
 <div class="flex gap-1 mb-6 border-b border-line">
-  <span class="px-4 py-2 text-sm font-semibold text-ink border-b-2" style="border-color:#4F46E5">
-    Passwords
-  </span>
+  {% for key, label in tabs %}
+  <a href="/settings?tab={{ key }}"
+     class="px-4 py-2 text-sm border-b-2 transition
+            {% if tab == key %}font-semibold text-ink{% else %}text-muted hover:text-ink border-transparent{% endif %}"
+     {% if tab == key %}style="border-color:#4F46E5"{% endif %}>{{ label }}</a>
+  {% endfor %}
 </div>
 
 {% if notice %}
@@ -22,6 +25,7 @@
      style="border-left-color:#F43F5E">{{ error }}</div>
 {% endif %}
 
+{% if tab == 'passwords' %}
 {# 🔴 The honest framing, first thing on the page. MUSAI must be able to REPLAY these
    passwords into a login form, so it can necessarily read them. A page that implied a hash
    would be lying, and a professor deciding whether to store a password deserves the real
@@ -143,4 +147,187 @@
   MUSAI signs in to Moodle only as you, and only for your own courses. Every backup and restore
   is recorded against <span class="font-mono">{{ professor.email }}</span>.
 </p>
+{% endif %}
+
+{# ═══ USAGE ═══════════════════════════════════════════════════════════════════════════════ #}
+{% if tab == 'usage' %}
+{% macro money(usd) %}{% if usd >= 0.01 %}${{ '%.3f'|format(usd) }}{% else %}${{ '%.5f'|format(usd) }}{% endif %}{% endmacro %}
+
+{# The headline. Quoted in QUESTIONS as well as dollars, because "$0.037" is not a quantity a
+   professor can plan with and "about 65 questions left" is. #}
+<div class="card p-6 mb-6">
+  <div class="flex items-baseline justify-between gap-4 flex-wrap">
+    <div>
+      <h2 class="font-serif text-2xl font-semibold text-ink">
+        {{ money(spend.usd) }} <span class="text-muted font-sans text-base font-normal">used this month</span>
+      </h2>
+      <p class="text-sm text-muted mt-1">
+        {% if spend.unlimited %}
+          No monthly limit on this account — measured anyway, because an untracked account is
+          the one whose spend nobody notices.
+        {% else %}
+          That is <strong>{{ spend.pct }}%</strong> of your free
+          {{ money(spend.cap_usd) }} — about
+          <strong>{{ spend.remaining_questions }}</strong> more analyst questions.
+        {% endif %}
+      </p>
+    </div>
+    <p class="text-xs text-muted">Since {{ spend.since }} · resets on the 1st</p>
+  </div>
+
+  {% if not spend.unlimited %}
+  <div class="mt-4 h-2 rounded-full overflow-hidden" style="background:#EEEBE2">
+    <div class="h-full rounded-full transition-all"
+         style="width:{{ [spend.pct, 100]|min }}%;
+                background:{% if spend.over %}#B91C1C{% elif spend.warn %}#D97706{% else %}var(--accent){% endif %}"></div>
+  </div>
+  {% endif %}
+
+  {% if not rate_card.enforced %}
+  {# ⚠️ Said out loud. A meter that looks like a limit but never stops anything is a lie of
+     omission the first time someone plans around it. #}
+  <p class="text-xs text-muted mt-3">
+    Nothing is blocked at the limit yet — this is measuring, not enforcing. The daily AI budget
+    is the one that actually stops a runaway.
+  </p>
+  {% endif %}
+</div>
+
+{# Where it went. #}
+<div class="card overflow-hidden mb-6">
+  <div class="px-5 py-4 border-b border-line">
+    <h2 class="text-sm font-semibold text-ink">Where it went</h2>
+    <p class="text-xs text-muted mt-0.5">Last 30 days, dearest first.</p>
+  </div>
+  {% if by_kind %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="text-xs text-muted border-b border-line">
+        <tr>
+          <th class="text-left font-medium px-5 py-2">Action</th>
+          <th class="text-right font-medium px-3 py-2">Times</th>
+          <th class="text-right font-medium px-3 py-2">Tokens</th>
+          <th class="text-right font-medium px-3 py-2">Minutes</th>
+          <th class="text-right font-medium px-5 py-2">Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in by_kind %}
+        <tr class="border-b border-line/60 last:border-0">
+          <td class="px-5 py-2.5">
+            <span class="text-ink">{{ r.label }}</span>
+            <span class="block text-xs text-muted">{{ r.blurb }}</span>
+          </td>
+          <td class="px-3 py-2.5 text-right tabular-nums">{{ r.count }}</td>
+          <td class="px-3 py-2.5 text-right tabular-nums text-muted">
+            {{ '{:,}'.format(r.tokens) if r.tokens else '—' }}</td>
+          <td class="px-3 py-2.5 text-right tabular-nums text-muted">
+            {{ '%.1f'|format(r.seconds / 60) if r.seconds else '—' }}</td>
+          <td class="px-5 py-2.5 text-right tabular-nums">
+            {{ money(r.usd) }}
+            <span class="block text-xs text-muted">{{ r.pct_of_total }}%</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="px-5 py-6 text-sm text-muted">
+    Nothing metered yet. Ask the analyst a question or run a backup and it will show up here.
+  </p>
+  {% endif %}
+</div>
+
+{# What things cost, BEFORE you click them. This is the table that makes the meter actionable:
+   it is the difference between "you have spent 12%" and "a restore costs 12%". #}
+<div class="card overflow-hidden mb-6">
+  <div class="px-5 py-4 border-b border-line">
+    <h2 class="text-sm font-semibold text-ink">What things cost</h2>
+    <p class="text-xs text-muted mt-0.5">
+      Typical, not a promise — a restore takes what Moodle's queue takes.
+    </p>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <tbody>
+        {% for t in typical %}
+        <tr class="border-b border-line/60 last:border-0">
+          <td class="px-5 py-2.5 text-ink">
+            {{ t.label }}
+            {% if t.note %}<span class="text-xs text-muted"> · {{ t.note }}</span>{% endif %}
+          </td>
+          <td class="px-3 py-2.5 text-right tabular-nums text-muted">{{ money(t.usd) }}</td>
+          {# Always expressed against the FREE allowance, even on the unlimited account: the
+             owner needs to see what a colleague's month buys, not what his own does. #}
+          <td class="px-5 py-2.5 text-right text-xs text-muted whitespace-nowrap">
+            {% if t.per_allowance and t.per_allowance > 1000 %}effectively free
+            {% elif t.per_allowance %}{{ t.per_allowance }} per free month
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="px-5 py-3 text-xs text-muted border-t border-line leading-relaxed">
+    <strong>Opening pages is not counted.</strong> One page view costs about $0.0000008 —
+    a millionth of a dollar, and one twelve-hundredth of a single analyst question. Recording
+    it would cost more than the page view itself, so MUSAI meters only the two things that
+    actually cost money: <strong>AI answers</strong> and <strong>browser jobs</strong>.
+  </p>
+</div>
+
+{# Show the working. A cost the reader cannot check is a number they have to take on faith,
+   and this one is an estimate built on two vendors' published rates. #}
+<details class="card p-5 mb-6">
+  <summary class="text-sm font-semibold text-ink cursor-pointer">How this is calculated</summary>
+  <div class="text-sm text-muted mt-3 space-y-2 leading-relaxed">
+    <p>
+      MUSAI usage is our own number, covering both vendors, so you never have to think about
+      which one a click reached. Rate card <span class="font-mono text-xs">{{ rate_card.version }}</span>:
+    </p>
+    <ul class="list-disc pl-5 space-y-1 text-xs">
+      <li><strong>{{ rate_card.model }}</strong> —
+        ${{ '%.2f'|format(rate_card.gemini_in_per_mtok) }} per million tokens in,
+        ${{ '%.2f'|format(rate_card.gemini_out_per_mtok) }} out.</li>
+      <li><strong>Server time</strong> — ${{ '%.2f'|format(rate_card.usd_per_million_cu) }} per
+        million compute units; a {{ rate_card.vcpu }} vCPU / {{ rate_card.gib }} GiB machine
+        burns {{ rate_card.cu_per_second|int }} per second, so
+        ${{ '%.8f'|format(rate_card.usd_per_second) }} a second.</li>
+      <li><strong>Requests</strong> — ${{ '%.2f'|format(rate_card.usd_per_million_requests) }}
+        per million.</li>
+    </ul>
+    <p class="text-xs">
+      Each line above is priced when it happens and never re-priced afterwards, so a rate
+      change tomorrow cannot make last month look more expensive than it was.
+    </p>
+  </div>
+</details>
+
+{% if events %}
+<div class="card overflow-hidden">
+  <div class="px-5 py-4 border-b border-line">
+    <h2 class="text-sm font-semibold text-ink">Recent activity</h2>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <tbody>
+        {% for e in events %}
+        <tr class="border-b border-line/60 last:border-0">
+          <td class="px-5 py-2 text-xs text-muted whitespace-nowrap">{{ e.day }}</td>
+          <td class="px-3 py-2 text-ink">{{ e.label }}
+            {% if e.detail %}<span class="text-xs text-muted">· {{ e.detail }}</span>{% endif %}</td>
+          <td class="px-3 py-2 text-right text-xs text-muted tabular-nums whitespace-nowrap">
+            {% if e.tokens %}{{ '{:,}'.format(e.tokens) }} tok{% endif %}
+            {% if e.seconds %}{{ '%.0f'|format(e.seconds) }}s{% endif %}</td>
+          <td class="px-5 py-2 text-right tabular-nums whitespace-nowrap">{{ money(e.usd) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endif %}
 {% endblock %}

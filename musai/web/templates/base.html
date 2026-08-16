@@ -195,6 +195,31 @@
     </span>
     {% endif %}
 
+    {# ── Usage meter ────────────────────────────────────────────────────────────
+       Month-to-date MUSAI usage as a share of the free allowance. Deliberately quoted in
+       QUESTIONS on hover, not only in dollars: "$0.0031" tells a professor nothing, "about 90
+       more questions this month" tells them what to do. Fixed greys/ambers like the dry-run
+       badge, outside the accent rotation — a budget reading that changes hue per tab reads as
+       a different state.
+
+       ⚠️ Only AI calls and browser jobs are counted. Browsing is free to any precision that
+       matters (a page view is 1/1206 of an analyst question), and a meter that ticks on every
+       click by $0.0000008 teaches you to stop reading it. #}
+    {% set meter = usage_meter(request) %}
+    {% if meter %}
+    <a href="/settings?tab=usage" class="chip hover:opacity-80 transition"
+       style="background:{% if meter.over %}#FDECEC{% elif meter.warn %}#FEF6E7{% else %}#F2F0E9{% endif %};
+              color:{% if meter.over %}#B91C1C{% elif meter.warn %}#92400E{% else %}#55535E{% endif %};
+              border-color:{% if meter.over %}#F5C6C6{% elif meter.warn %}#F5E0B8{% else %}#E4E0D5{% endif %}"
+       title="{% if meter.unlimited %}No monthly limit on this account — still measured, because an untracked account is the one nobody notices.{% else %}About {{ meter.remaining_questions }} more analyst questions left this month.{% endif %} Resets on the 1st.">
+      {% if meter.unlimited %}
+        ${{ '%.4f'|format(meter.usd) }} · no limit
+      {% else %}
+        {{ meter.pct }}% of free usage
+      {% endif %}
+    </a>
+    {% endif %}
+
     {# Who is acting. The AuditLog records this email, so the page must show it — a cockpit
        that can act on a live course must never leave "as whom?" ambiguous. #}
     {% set me = current_user(request) %}

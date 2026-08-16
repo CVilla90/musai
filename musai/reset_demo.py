@@ -86,6 +86,10 @@ DERIVED: tuple[tuple[str, str], ...] = (
 RECORD: tuple[tuple[str, str], ...] = (
     ("audit_log",     "MUSAI's own record of every privileged action — NOT derivable"),
     ("ai_usage",      "Gemini token ledger"),
+    # A bill is a record, not derived data. Wiping it for a demo would erase what a professor
+    # was charged, and there is nothing left to reconstruct it from — the tokens are spent and
+    # the rate card may since have changed. Behind `--clear-audit` with the rest of the record.
+    ("usage_event",   "itemised MUSAI spend ledger — what each action cost, NOT re-derivable"),
     ("usage_counter", "SUSAI rate-limit counters"),
 )
 

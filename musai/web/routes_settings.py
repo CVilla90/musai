@@ -22,13 +22,17 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
-from musai import jobs, professors as prof_store
+from musai import jobs, metering, professors as prof_store
 from musai.config import settings
 from musai.db import engine
 from musai.security import vault
 from musai.web.deps import current_professor
 
 router = APIRouter(tags=["settings"])
+
+#: Settings tabs, in nav order. A tab not listed here cannot be reached by URL — `_page`
+#: falls back to the first — so a typo in a link lands on a real page instead of a blank one.
+TABS = [("passwords", "Passwords"), ("usage", "Usage")]
 
 
 def _templates():
@@ -38,9 +42,16 @@ def _templates():
 
 
 def _page(request: Request, *, notice: str = "", error: str = "", tab: str = "passwords"):
+    if tab not in dict(TABS):
+        tab = TABS[0][0]
     with Session(engine) as sess:
         prof = current_professor(request, sess)
         status = prof_store.credential_status(sess, prof.id)
+        # 🔴 Scoped to `prof.email`, not to a shared constant. The whole point of the Usage tab
+        # is that a professor sees THEIR spend; an unscoped rollup would show them the faculty's.
+        spend = metering.month_to_date(sess, prof.email, is_admin=prof.is_admin)
+        by_kind = metering.breakdown(sess, prof.email) if tab == "usage" else []
+        events = metering.recent(sess, prof.email) if tab == "usage" else []
     return _templates().TemplateResponse(
         "settings.html",
         {
@@ -54,6 +65,12 @@ def _page(request: Request, *, notice: str = "", error: str = "", tab: str = "pa
             "notice": notice,
             "error": error,
             "tab": tab,
+            "tabs": TABS,
+            "spend": spend,
+            "by_kind": by_kind,
+            "events": events,
+            "rate_card": metering.rate_card(),
+            "typical": metering.typical_costs(prof.is_admin),
             "recent_checks": jobs.recent(owner=prof.email, kind=jobs.CREDENTIAL_CHECK, limit=3),
         },
     )

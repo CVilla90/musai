@@ -152,7 +152,29 @@ def start(kind: str, *, owner: str, params: Optional[dict] = None,
     job_id = create(kind, owner=owner, params=params)
 
     def runner() -> None:
+        import time
+
+        from musai import metering
+
         update(job_id, status="running")
+        t0 = time.monotonic()
+
+        def bill() -> None:
+            """Book the wall-clock this job held a container for.
+
+            🔴 Billed in `finally`, so a job that fails at minute fourteen still costs what it
+            cost. A ledger that only records successes understates precisely the runs worth
+            looking at, and "my restore died and I still got charged" is the truth — the
+            machine ran either way.
+
+            ⚠️ Wall-clock, not CPU time: Autoscale bills the machine you configured for as long
+            as it is serving, and most of a restore is this thread waiting on a queued PHP job
+            on UACH's server. `record_safely` swallows its own failures — an accounting error
+            must never surface to the professor as a failed course write.
+            """
+            metering.record_safely(owner, kind, seconds=time.monotonic() - t0,
+                                   detail=str((params or {}).get("target", ""))[:60])
+
         try:
             result = work(job_id) or {}
             update(job_id,
@@ -168,6 +190,8 @@ def start(kind: str, *, owner: str, params: Optional[dict] = None,
             log.error(f"{kind} job {job_id} failed: {message}\n{tb}")
             update(job_id, status="failed", finished_at=_now(), step=f"ERROR: {message}",
                    result={"ok": False, "error": message, "traceback": tb})
+        finally:
+            bill()
 
     threading.Thread(target=runner, daemon=True, name=f"{kind}-{job_id}").start()
     return job_id

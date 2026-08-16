@@ -26,6 +26,40 @@ templates.env.globals["grade_colors"] = grade_colors
 templates.env.globals["current_user"] = auth_mod.current_user
 
 
+def usage_meter(request: Request):
+    """Month-to-date MUSAI spend for the signed-in professor, or `None` when signed out.
+
+    A template global rather than a value each route passes down, for the same reason
+    `current_user` is one: the meter belongs to the nav, and forty routes remembering to
+    include it is forty chances to forget. The ones that forgot would silently render a nav
+    with no meter, which reads as "nothing spent" — the wrong answer, told confidently.
+
+    One indexed SUM over a table that holds ~50 rows per professor per month. Cached on the
+    request so a page that renders the nav twice does not query twice.
+
+    🔴 Never raises. `current_professor` 401s when signed out, and an exception here would take
+    down every page in the app to report an accounting total.
+    """
+    cached = getattr(request.state, "_usage_meter", ...)
+    if cached is not ...:
+        return cached
+    meter = None
+    try:
+        if auth_mod.current_user(request):
+            from musai import metering
+
+            with Session(engine) as sess:
+                prof = current_professor(request, sess)
+                meter = metering.month_to_date(sess, prof.email, is_admin=prof.is_admin)
+    except Exception:                                            # noqa: BLE001
+        meter = None
+    request.state._usage_meter = meter
+    return meter
+
+
+templates.env.globals["usage_meter"] = usage_meter
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # On local dev (SQLite): creates all tables on startup.

@@ -7,7 +7,7 @@ The professor-facing cousin of SUSAI. It can only *read* (its tools go through
 from __future__ import annotations
 
 from musai.config import settings
-from musai.assistant.tools import TOOLS
+from musai.assistant.tools import tools_for
 
 #: ⚠️ The professor is deliberately NOT named here. This used to interpolate a real name, which
 #: bought the model nothing — every tool is already scoped to the signed-in professor — and put
@@ -85,6 +85,8 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
     from musai.ai.gemini import ASSISTANT, generate
     from musai.db import engine
 
+    from musai.professors import by_email
+
     with Session(engine) as sess:
         allowed, why = bud.check(sess, actor, is_admin=is_admin)
         if allowed:
@@ -94,9 +96,17 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
             return {"answer": _MESSAGES[why], "tools": [], "ok": False,
                     "usage": bud.summary(sess, actor, is_admin=is_admin),
                     "spend": metering.month_to_date(sess, actor, is_admin=is_admin)}
+        # 🔴 Whose data may this turn read? Resolved here, once, from the same string the call
+        # is billed to — so the budget and the scope can never name two different people.
+        # An actor with no `Professor` row (the legacy `web:carlos`, a script, a typo) resolves
+        # to `None`, and `tools_for(None)` finds nothing. **Failing towards an empty answer is
+        # a bug report; failing the other way is a data breach.**
+        me = by_email(sess, actor)
+        professor_id = me.id if me else None
 
     t0 = time.monotonic()
-    result = generate(system=SYSTEM, contents=question, tools=TOOLS, profile=ASSISTANT)
+    result = generate(system=SYSTEM, contents=question, tools=tools_for(professor_id),
+                      profile=ASSISTANT)
     elapsed = time.monotonic() - t0
 
     with Session(engine) as sess:

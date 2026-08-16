@@ -78,6 +78,20 @@ def get_or_create(sess: Session, *, email: str, full_name: str = "",
     return prof
 
 
+def by_email(sess: Session, email: str) -> Optional[Professor]:
+    """The row for an address, or `None`. **Never creates one.**
+
+    The read-only counterpart of `get_or_create`, for callers that hold an actor string and
+    need the identity behind it rather than the right to mint one. `None` is a real answer and
+    must be handled as "this actor owns nothing" — see `musai/assistant/tools.py`, where the
+    legacy actor `web:carlos` is not an address at all.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    return sess.exec(select(Professor).where(Professor.email == email)).first()
+
+
 # ── ownership ─────────────────────────────────────────────────────────────────
 def courses_owned_by(sess: Session, professor_id: int, *,
                      semester_id: Optional[int] = None) -> list[Course]:

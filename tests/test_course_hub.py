@@ -579,7 +579,7 @@ def test_a_corrupt_blob_renders_an_empty_form_instead_of_a_500(session: Session,
 
 def test_default_owner_matches_the_app_actor():
     """Two constants for the same professor is how a saved profile goes missing."""
-    from musai.analyst.agent import ACTOR
+    from musai.assistant.agent import ACTOR
     assert hub_store.DEFAULT_OWNER == ACTOR
 
 

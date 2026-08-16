@@ -1,7 +1,7 @@
-"""Read-only analytics tools exposed to the in-app AI analyst (Gemini function-calling).
+"""Read-only analytics tools exposed to the in-app AI assistant (Gemini function-calling).
 
 RAIL: every tool here reads through ``ro_engine`` and only ever SELECTs. There is no
-write path — the analyst is structurally incapable of changing grades. Each function has
+write path — the assistant is structurally incapable of changing grades. Each function has
 a clear docstring + simple-typed args so the SDK can build the schema and auto-call it.
 
 Grades are 0–10; passing is 7.0. "final" = the curved/overridden + extra value that uploads;

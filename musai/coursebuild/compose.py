@@ -16,7 +16,7 @@ from musai.ai.gemini import SUSAI_STUDENT, AiResult, Profile, generate
 from musai.coursebuild.render import BLOCK_TYPES, PALETTES, render_checked
 
 # Small envelope: this is a short structured emission, not an essay. Reusing the student
-# profile's tight caps rather than the analyst's roomier ones.
+# profile's tight caps rather than the assistant's roomier ones.
 COMPOSE = Profile(
     "coursebuild_compose",
     max_remote_calls=0,      # no tools — pure generation

@@ -44,12 +44,12 @@ def test_a_wall_second_costs_what_the_published_rates_say():
     assert met.USD_PER_SECOND == pytest.approx(0.0000132)
 
 
-def test_an_analyst_question_costs_about_a_tenth_of_a_cent():
+def test_an_assistant_question_costs_about_a_tenth_of_a_cent():
     micro = met.price_micro_usd(requests=1, seconds=3.0, tokens_in=1400, tokens_out=200)
-    assert 800 <= micro <= 1200, f"an analyst question priced at {micro} micro-USD"
+    assert 800 <= micro <= 1200, f"an assistant question priced at {micro} micro-USD"
 
 
-def test_the_ai_dominates_an_analyst_question_not_the_compute():
+def test_the_ai_dominates_an_assistant_question_not_the_compute():
     """The fact that decides what is worth metering: tokens are the bill, seconds are rounding.
 
     If this ever inverts — a much cheaper model, or a much slower one — the design of the meter
@@ -83,7 +83,7 @@ def test_a_recorded_cost_survives_a_rate_change(sess, monkeypatch):
     make last month more expensive than it was, and the professor who reads that has no way to
     tell a rate change from an error.
     """
-    met.record(sess, "prof@uach.mx", "analyst", tokens_in=100_000, tokens_out=10_000,
+    met.record(sess, "prof@uach.mx", "assistant", tokens_in=100_000, tokens_out=10_000,
                model="gemini-3.5-flash-lite")
     sess.commit()
     before = met._sum_micro(sess, "prof@uach.mx", date(2000, 1, 1))
@@ -97,7 +97,7 @@ def test_a_recorded_cost_survives_a_rate_change(sess, monkeypatch):
 
 
 def test_every_row_stamps_the_rate_card_that_priced_it(sess):
-    met.record(sess, "prof@uach.mx", "analyst", tokens_in=1000, tokens_out=100)
+    met.record(sess, "prof@uach.mx", "assistant", tokens_in=1000, tokens_out=100)
     sess.commit()
     row = sess.exec(select(UsageEvent)).first()
     assert row.rate_card == met.RATE_CARD and row.rate_card
@@ -107,8 +107,8 @@ def test_every_row_stamps_the_rate_card_that_priced_it(sess):
 def test_spend_is_per_professor(sess):
     """🔴 The regression that made this feature necessary. One professor's questions must
     never appear in another's usage — the tab shows what someone did, not only what they owe."""
-    met.record(sess, "ana@uach.mx", "analyst", tokens_in=500_000, tokens_out=50_000)
-    met.record(sess, "beto@uach.mx", "analyst", tokens_in=1000, tokens_out=100)
+    met.record(sess, "ana@uach.mx", "assistant", tokens_in=500_000, tokens_out=50_000)
+    met.record(sess, "beto@uach.mx", "assistant", tokens_in=1000, tokens_out=100)
     sess.commit()
     ana = met.month_to_date(sess, "ana@uach.mx")
     beto = met.month_to_date(sess, "beto@uach.mx")
@@ -119,9 +119,9 @@ def test_spend_is_per_professor(sess):
 def test_last_months_spend_does_not_count_against_this_month(sess):
     """The allowance resets on the 1st, so the rollup must start there and not 30 days back."""
     today = date(2026, 8, 16)
-    met.record(sess, "prof@uach.mx", "analyst", tokens_in=900_000, tokens_out=0,
+    met.record(sess, "prof@uach.mx", "assistant", tokens_in=900_000, tokens_out=0,
                day=date(2026, 7, 20))
-    met.record(sess, "prof@uach.mx", "analyst", tokens_in=1000, tokens_out=0,
+    met.record(sess, "prof@uach.mx", "assistant", tokens_in=1000, tokens_out=0,
                day=date(2026, 8, 3))
     sess.commit()
     mtd = met.month_to_date(sess, "prof@uach.mx", today=today)
@@ -135,7 +135,7 @@ def test_last_months_spend_does_not_count_against_this_month(sess):
 def test_the_admin_is_unlimited_and_still_metered(sess):
     """An untracked account is the one nobody notices, and it is the one that runs every
     experiment. Unlimited means no cap, never no ledger."""
-    met.record(sess, "owner@uach.mx", "analyst", tokens_in=10_000_000, tokens_out=1_000_000)
+    met.record(sess, "owner@uach.mx", "assistant", tokens_in=10_000_000, tokens_out=1_000_000)
     sess.commit()
     mtd = met.month_to_date(sess, "owner@uach.mx", is_admin=True)
     assert mtd["unlimited"] is True
@@ -156,7 +156,7 @@ def test_a_professor_can_be_over_without_being_blocked(sess, monkeypatch):
     observed over a real month, and refusing a colleague's restore on a guess is worse than
     an overspend of a few cents. The DAILY budget is what actually stops a runaway loop."""
     monkeypatch.setattr(settings, "usage_enforce", False)
-    met.record(sess, "gastador@uach.mx", "analyst",
+    met.record(sess, "gastador@uach.mx", "assistant",
                tokens_in=settings.usage_free_micro_usd * 100, tokens_out=0)
     sess.commit()
     assert met.month_to_date(sess, "gastador@uach.mx")["over"] is True
@@ -168,7 +168,7 @@ def test_a_professor_can_be_over_without_being_blocked(sess, monkeypatch):
 
 def test_enforcement_never_refuses_the_admin(sess, monkeypatch):
     monkeypatch.setattr(settings, "usage_enforce", True)
-    met.record(sess, "owner@uach.mx", "analyst",
+    met.record(sess, "owner@uach.mx", "assistant",
                tokens_in=settings.usage_free_micro_usd * 100, tokens_out=0)
     sess.commit()
     assert met.check(sess, "owner@uach.mx", is_admin=True) == (True, "")
@@ -178,7 +178,7 @@ def test_the_warning_comes_before_the_wall(sess):
     """80% is a warning, not a refusal — a professor should learn they are close while they can
     still plan around it."""
     cap = settings.usage_free_micro_usd
-    met.record(sess, "casi@uach.mx", "analyst", tokens_in=0, tokens_out=0,
+    met.record(sess, "casi@uach.mx", "assistant", tokens_in=0, tokens_out=0,
                seconds=(cap * 0.85 / 1e6) / met.USD_PER_SECOND)
     sess.commit()
     mtd = met.month_to_date(sess, "casi@uach.mx")
@@ -187,7 +187,7 @@ def test_the_warning_comes_before_the_wall(sess):
 
 # ── the breakdown ─────────────────────────────────────────────────────────────
 def test_the_breakdown_names_the_dearest_action_first(sess):
-    met.record(sess, "prof@uach.mx", "analyst", tokens_in=1000, tokens_out=100)
+    met.record(sess, "prof@uach.mx", "assistant", tokens_in=1000, tokens_out=100)
     met.record(sess, "prof@uach.mx", "course_restore", seconds=900.0)
     sess.commit()
     rows = met.breakdown(sess, "prof@uach.mx")
@@ -198,9 +198,9 @@ def test_the_breakdown_names_the_dearest_action_first(sess):
 
 def test_the_breakdown_is_scoped_to_one_professor(sess):
     met.record(sess, "ana@uach.mx", "course_restore", seconds=900.0)
-    met.record(sess, "beto@uach.mx", "analyst", tokens_in=1000, tokens_out=100)
+    met.record(sess, "beto@uach.mx", "assistant", tokens_in=1000, tokens_out=100)
     sess.commit()
-    assert [r["kind"] for r in met.breakdown(sess, "beto@uach.mx")] == ["analyst"]
+    assert [r["kind"] for r in met.breakdown(sess, "beto@uach.mx")] == ["assistant"]
 
 
 def test_an_unknown_kind_still_records_rather_than_crashing(sess):
@@ -318,7 +318,7 @@ def test_a_signed_out_visitor_gets_no_meter_and_no_crash():
 
 
 # ── what the app is used FOR ──────────────────────────────────────────────────
-def test_an_analyst_row_records_which_tools_ran_not_the_question(sess, monkeypatch):
+def test_an_assistant_row_records_which_tools_ran_not_the_question(sess, monkeypatch):
     """⭐ The only record of what professors use the assistant for, and it cannot be
     backfilled — a question not classified when it was asked is gone.
 
@@ -328,7 +328,7 @@ def test_an_analyst_row_records_which_tools_ran_not_the_question(sess, monkeypat
     panel; this is the version that does not have to be walked back later.
     """
     from musai.ai.gemini import AiResult
-    from musai.analyst import agent
+    from musai.assistant import agent
 
     monkeypatch.setattr(agent, "ACTOR", "prof@uach.mx")
     monkeypatch.setattr(
@@ -341,6 +341,6 @@ def test_an_analyst_row_records_which_tools_ran_not_the_question(sess, monkeypat
     out = agent.ask("how is she doing?", actor="prof@uach.mx", is_admin=True)
     assert out["ok"] is True
 
-    row = sess.exec(select(UsageEvent).where(UsageEvent.kind == "analyst")).first()
+    row = sess.exec(select(UsageEvent).where(UsageEvent.kind == "assistant")).first()
     assert row.detail == "student_status"
     assert "how is she doing" not in row.detail

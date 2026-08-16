@@ -9,7 +9,7 @@ single very expensive request can overshoot its cap once but never twice. That's
 trade: we cannot know a request's cost until it has run.
 
 `actor` is a namespaced key so the same ledger serves every surface:
-    web:carlos          the cockpit analyst
+    web:carlos          the cockpit assistant
     wa:526141837420     a WhatsApp sender
 """
 

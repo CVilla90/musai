@@ -6,13 +6,13 @@ argument the model could pass — it can only ever see the bound student's own d
 write path exists.
 
 RAIL (semester): students see the CURRENT semester ONLY, always — there is deliberately no
-`semester` argument here, unlike the professor-facing analyst tools. A returning student has
+`semester` argument here, unlike the professor-facing assistant tools. A returning student has
 enrollments in several semesters; an unscoped lookup would hand them the OLDEST one. If they
 have no current enrollment they get nothing, never last semester's grades (ROADMAP,
 "Semester scoping").
 
 NOTE: do NOT add `from __future__ import annotations` here — it stringizes type hints and
-breaks the google-genai schema builder (learned the hard way on the in-app analyst).
+breaks the google-genai schema builder (learned the hard way on the in-app assistant).
 """
 
 import json

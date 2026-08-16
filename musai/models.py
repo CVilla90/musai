@@ -455,7 +455,7 @@ class UsageEvent(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     actor: str = Field(index=True)       # the signed-in professor's email, or wa:<phone>
     day: date = Field(index=True)        # local day, for monthly rollups without TZ surprises
-    kind: str = Field(index=True)        # "analyst" | "course_restore" | …
+    kind: str = Field(index=True)        # "assistant" | "course_restore" | …
     detail: str = Field(default="")      # free text for the tab, e.g. a group code
     tokens_in: int = Field(default=0)
     tokens_out: int = Field(default=0)

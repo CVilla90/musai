@@ -1,4 +1,4 @@
-"""In-app AI analyst routes — a read-only cockpit chat over the gradebook."""
+"""In-app AI assistant routes — a read-only cockpit chat over the gradebook."""
 
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
@@ -6,7 +6,7 @@ from sqlmodel import Session
 
 from musai import metering
 from musai.config import settings
-from musai.analyst.agent import ask
+from musai.assistant.agent import ask
 from musai.db import engine
 from musai.web.app import templates
 from musai.web.deps import current_professor

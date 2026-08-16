@@ -168,7 +168,7 @@
         {% else %}
           That is <strong>{{ spend.pct }}%</strong> of your free
           {{ money(spend.cap_usd) }} — about
-          <strong>{{ spend.remaining_questions }}</strong> more analyst questions.
+          <strong>{{ spend.remaining_questions }}</strong> more assistant questions.
         {% endif %}
       </p>
     </div>
@@ -234,7 +234,7 @@
   </div>
   {% else %}
   <p class="px-5 py-6 text-sm text-muted">
-    Nothing metered yet. Ask the analyst a question or run a backup and it will show up here.
+    Nothing metered yet. Ask the assistant a question or run a backup and it will show up here.
   </p>
   {% endif %}
 </div>
@@ -272,7 +272,7 @@
   </div>
   <p class="px-5 py-3 text-xs text-muted border-t border-line leading-relaxed">
     <strong>Opening pages is not counted.</strong> One page view costs about $0.0000008 —
-    a millionth of a dollar, and one twelve-hundredth of a single analyst question. Recording
+    a millionth of a dollar, and one twelve-hundredth of a single assistant question. Recording
     it would cost more than the page view itself, so MUSAI meters only the two things that
     actually cost money: <strong>AI answers</strong> and <strong>browser jobs</strong>.
   </p>

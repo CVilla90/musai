@@ -1,13 +1,13 @@
-"""SUSAI professor/coordinator brain — the WhatsApp cousin of the in-app analyst.
+"""SUSAI professor/coordinator brain — the WhatsApp cousin of the in-app assistant.
 
 When the owner (the admin/coordinator) texts SUSAI, he gets READ-ONLY analytics over his own
-course groups, reusing the analyst's professor-facing tools. Single-tenant for now: all courses
+course groups, reusing the assistant's professor-facing tools. Single-tenant for now: all courses
 in the DB are his. Multi-professor scoping (by professor_id) + semester scoping is future work
 (see ROADMAP "Future / Institutional").
 """
 
 from musai.ai.gemini import SUSAI_ADMIN
-from musai.analyst.tools import TOOLS as PROF_TOOLS
+from musai.assistant.tools import TOOLS as PROF_TOOLS
 from musai.susai._chat import chat
 
 SYSTEM = (

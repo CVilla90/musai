@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     ai_daily_requests_user: int = 30
 
     # Monthly free MUSAI usage per professor, in millionths of a USD. $0.10 buys roughly 100
-    # analyst questions or 8 course restores — see musai/metering.py for the arithmetic.
+    # assistant questions or 8 course restores — see musai/metering.py for the arithmetic.
     # 🔴 Not enforced by default. The durations behind the estimate have never been measured
     # over a real month, and refusing a colleague's restore on a guess is worse than an
     # overspend of a few cents. The DAILY token budget already stops a runaway loop, which is

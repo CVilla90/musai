@@ -75,7 +75,7 @@ class Profile:
 # no hard reasoning — so flash-lite is the right default, and that was re-tested rather than
 # assumed when gemini-3.7-flash shipped on 2026-08-13.
 #
-# 🔴 **BENCHMARKED 2026-08-16 ON THE REAL ANALYST WORKLOAD** (same system prompt, same tools,
+# 🔴 **BENCHMARKED 2026-08-16 ON THE REAL ASSISTANT WORKLOAD** (same system prompt, same tools,
 # the professor's own questions; 6 runs per config). Upgrading the model was strictly WORSE:
 #
 #   gemini-3.5-flash-lite   6/6 answered    2.7 s/q   1544 tok/q   ← stays the default
@@ -118,7 +118,7 @@ def prices_for(model: str) -> tuple[float, float]:
 
 # Tuned for what each surface actually needs. Deliberately tight — raise them on evidence,
 # not on a hunch.
-ANALYST = Profile("analyst", max_remote_calls=6, max_output_tokens=1200, timeout_s=45)
+ASSISTANT = Profile("assistant", max_remote_calls=6, max_output_tokens=1200, timeout_s=45)
 SUSAI_STUDENT = Profile(
     "susai_student", max_remote_calls=3, max_output_tokens=400, timeout_s=30, temperature=0.3
 )
@@ -214,7 +214,7 @@ def generate(
     system: str,
     contents: Any,
     tools: Optional[Sequence[Callable]] = None,
-    profile: Profile = ANALYST,
+    profile: Profile = ASSISTANT,
     response_schema: Optional[Any] = None,
 ) -> AiResult:
     """One guarded Gemini turn. Never raises; always returns an AiResult.

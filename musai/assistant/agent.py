@@ -1,4 +1,4 @@
-"""In-app AI analyst — Gemini with read-only function-calling over the gradebook.
+"""In-app AI assistant — Gemini with read-only function-calling over the gradebook.
 
 The professor-facing cousin of SUSAI. It can only *read* (its tools go through
 ``ro_engine`` and only SELECT), so it can never change a grade.
@@ -7,7 +7,7 @@ The professor-facing cousin of SUSAI. It can only *read* (its tools go through
 from __future__ import annotations
 
 from musai.config import settings
-from musai.analyst.tools import TOOLS
+from musai.assistant.tools import TOOLS
 
 #: ⚠️ The professor is deliberately NOT named here. This used to interpolate a real name, which
 #: bought the model nothing — every tool is already scoped to the signed-in professor — and put
@@ -39,7 +39,7 @@ SYSTEM = (
 ACTOR = "web:carlos"
 
 _MESSAGES = {
-    "no_key": "No Gemini API key set (GEMINI_API_KEY in MUSAI/.env). The analyst is offline.",
+    "no_key": "No Gemini API key set (GEMINI_API_KEY in MUSAI/.env). The assistant is offline.",
     "quota": "Gemini says the API quota is exhausted. Check billing/limits in the Google AI "
              "console — MUSAI will not retry automatically.",
     "auth": "Gemini rejected the API key. Check GEMINI_API_KEY in MUSAI/.env.",
@@ -82,7 +82,7 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
 
     from musai import metering
     from musai.ai import budget as bud
-    from musai.ai.gemini import ANALYST, generate
+    from musai.ai.gemini import ASSISTANT, generate
     from musai.db import engine
 
     with Session(engine) as sess:
@@ -96,7 +96,7 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
                     "spend": metering.month_to_date(sess, actor, is_admin=is_admin)}
 
     t0 = time.monotonic()
-    result = generate(system=SYSTEM, contents=question, tools=TOOLS, profile=ANALYST)
+    result = generate(system=SYSTEM, contents=question, tools=TOOLS, profile=ASSISTANT)
     elapsed = time.monotonic() - t0
 
     with Session(engine) as sess:
@@ -111,7 +111,7 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
         # of what they typed, so the admin panel can answer "what is this app used for?"
         # without anyone's questions being readable. Storing the question text would be the
         # easy version and the wrong one.
-        metering.record(sess, actor, "analyst", seconds=elapsed,
+        metering.record(sess, actor, "assistant", seconds=elapsed,
                         detail=",".join(result.tools),
                         tokens_in=result.tokens_in, tokens_out=result.tokens_out,
                         model=result.model or "")
@@ -124,7 +124,7 @@ def ask(question: str, *, actor: str = ACTOR, is_admin: bool = True) -> dict:
                 "usage": usage, "spend": spend}
 
     reason = result.reason or "error"
-    answer = _MESSAGES.get(reason, f"Analyst error: {reason}")
+    answer = _MESSAGES.get(reason, f"Assistant error: {reason}")
 
     # A turn that called tools and then fell silent still HAS the data — the model just did not
     # write the sentence. Showing what the tools returned turns a dead end into an answer the

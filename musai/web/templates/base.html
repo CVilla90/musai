@@ -168,7 +168,7 @@
       <span class="text-[11px] text-muted hidden sm:inline">Moodle&nbsp;·&nbsp;UACH&nbsp;·&nbsp;AI</span>
     </a>
     {% set nav = nav_section | default('courses') %}
-    {% for key, label, href in [('courses', 'Courses', '/'), ('analyst', 'Analyst', '/assistant'),
+    {% for key, label, href in [('courses', 'Courses', '/'), ('assistant', 'Assistant', '/assistant'),
                                 ('settings', 'Settings', '/settings')] %}
     <a href="{{ href }}"
        class="text-sm px-2.5 py-1.5 rounded-lg transition
@@ -203,7 +203,7 @@
        a different state.
 
        ⚠️ Only AI calls and browser jobs are counted. Browsing is free to any precision that
-       matters (a page view is 1/1206 of an analyst question), and a meter that ticks on every
+       matters (a page view is 1/1206 of an assistant question), and a meter that ticks on every
        click by $0.0000008 teaches you to stop reading it. #}
     {% set meter = usage_meter(request) %}
     {% if meter %}
@@ -211,7 +211,7 @@
        style="background:{% if meter.over %}#FDECEC{% elif meter.warn %}#FEF6E7{% else %}#F2F0E9{% endif %};
               color:{% if meter.over %}#B91C1C{% elif meter.warn %}#92400E{% else %}#55535E{% endif %};
               border-color:{% if meter.over %}#F5C6C6{% elif meter.warn %}#F5E0B8{% else %}#E4E0D5{% endif %}"
-       title="{% if meter.unlimited %}No monthly limit on this account — still measured, because an untracked account is the one nobody notices.{% else %}About {{ meter.remaining_questions }} more analyst questions left this month.{% endif %} Resets on the 1st.">
+       title="{% if meter.unlimited %}No monthly limit on this account — still measured, because an untracked account is the one nobody notices.{% else %}About {{ meter.remaining_questions }} more assistant questions left this month.{% endif %} Resets on the 1st.">
       {% if meter.unlimited %}
         ${{ '%.4f'|format(meter.usd) }} · no limit
       {% else %}

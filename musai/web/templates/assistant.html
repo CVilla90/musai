@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% set nav_section = 'analyst' %}
-{% block title %}Analyst — MUSAI{% endblock %}
+{% set nav_section = 'assistant' %}
+{% block title %}Assistant — MUSAI{% endblock %}
 
 {% block content %}
 <div class="mb-4 flex items-center gap-3">
   <a href="/" class="text-muted hover:text-ink text-sm">← Cockpit</a>
-  <h1 class="font-serif text-2xl font-semibold text-ink">Analyst</h1>
+  <h1 class="font-serif text-2xl font-semibold text-ink">Assistant</h1>
   <span class="text-muted text-xs">read-only · {{ model }}</span>
 </div>
 
 {% if not has_key %}
 <div class="card p-4 text-sm" style="background:#FBF1E1;color:#B45309">
-  No <code>GEMINI_API_KEY</code> set in <code>MUSAI/.env</code> — the analyst is offline.
+  No <code>GEMINI_API_KEY</code> set in <code>MUSAI/.env</code> — the assistant is offline.
 </div>
 {% else %}
 
@@ -35,7 +35,7 @@
         hx-post="/assistant/ask" hx-target="#chat" hx-swap="beforeend"
         hx-indicator="#thinking" hx-on::after-request="if(event.detail.successful){this.reset()}">
     <input id="q" name="q" autocomplete="off" required
-           placeholder="Ask the analyst…"
+           placeholder="Ask the assistant…"
            class="flex-1 text-sm border border-line rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-clay/50">
     <button class="btn btn-clay">Ask</button>
   </form>
@@ -45,7 +45,7 @@
 </div>
 
 <p class="text-xs text-muted mt-3">
-  The analyst reads the database through read-only tools only — it can answer about grades,
+  The assistant reads the database through read-only tools only — it can answer about grades,
   but it can never change them.
 </p>
 

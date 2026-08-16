@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from musai.ai import budget as bud
 from musai.ai.gemini import (
-    ANALYST,
+    ASSISTANT,
     FLASH,
     PRICES,
     SUSAI_ADMIN,
@@ -69,7 +69,7 @@ def test_quota_is_terminal_not_transient():
 
 
 # ── profiles: every surface is capped ─────────────────────────────────────────
-@pytest.mark.parametrize("profile", [ANALYST, SUSAI_STUDENT, SUSAI_ADMIN])
+@pytest.mark.parametrize("profile", [ASSISTANT, SUSAI_STUDENT, SUSAI_ADMIN])
 def test_every_profile_caps_tool_fanout_and_output(profile):
     """An uncapped profile is an unbounded bill."""
     assert 0 < profile.max_remote_calls <= 8
@@ -79,8 +79,8 @@ def test_every_profile_caps_tool_fanout_and_output(profile):
 
 def test_student_profile_is_the_tightest():
     """Students are the highest-volume surface, so they get the smallest envelope."""
-    assert SUSAI_STUDENT.max_remote_calls <= ANALYST.max_remote_calls
-    assert SUSAI_STUDENT.max_output_tokens <= ANALYST.max_output_tokens
+    assert SUSAI_STUDENT.max_remote_calls <= ASSISTANT.max_remote_calls
+    assert SUSAI_STUDENT.max_output_tokens <= ASSISTANT.max_output_tokens
 
 
 # ── pricing ───────────────────────────────────────────────────────────────────

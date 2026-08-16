@@ -10,12 +10,12 @@ Measured 2026-08-16, at the rates in `RATE_CARD`:
 
     page view (cockpit)          $0.0000008      125,628 of them fit in $0.10
     map my courses (~30 s)       $0.00040
-    analyst question             $0.00096            104 of them fit in $0.10
+    assistant question           $0.00096            104 of them fit in $0.10
     course backup (~3 min)       $0.0024
     build: compose a block       $0.0031
     course restore (~15 min)     $0.0119               8 of them fit in $0.10
 
-**A page view is 1/1206 of an analyst question and 1/14,850 of a restore**, and an analyst
+**A page view is 1/1206 of an assistant question and 1/14,850 of a restore**, and an assistant
 question is 96 % Gemini, 4 % compute. So only two things are written to the ledger: **AI calls
 and browser jobs.**
 
@@ -72,7 +72,7 @@ MICRO = 1_000_000  # micro-USD per USD
 #: Label and one-line explanation per metered kind, for the Usage tab. A kind missing here
 #: still records — it just shows under its raw name, which is better than not recording.
 KINDS = {
-    "analyst": ("Analyst question", "A question to the AI analyst over your gradebook."),
+    "assistant": ("Assistant question", "A question to the AI assistant over your gradebook."),
     "build_compose": ("Content composed", "AI-composed HTML for a course block."),
     "course_publish": ("Content published", "Writing composed content into a Moodle course."),
     "susai": ("Student assistant", "A student's WhatsApp question answered by SUSAI."),
@@ -203,7 +203,7 @@ def month_to_date(sess: Session, actor: str, *, is_admin: bool = False,
         "over": bool(cap is not None and spent >= cap),
         "warn": bool(pct is not None and pct >= 80),
         "remaining_micro_usd": left,
-        # How many more analyst questions the remaining allowance buys. `None` = unlimited.
+        # How many more assistant questions the remaining allowance buys. `None` = unlimited.
         "remaining_questions": None if left is None else int(left // max(1, per_question)),
         "per_question_micro_usd": per_question,
     }
@@ -284,7 +284,7 @@ def rate_card() -> dict:
 #: and MUSAI cannot make it faster, only stop you waiting on it.
 TYPICAL = [
     ("Opening any page", dict(requests=1, seconds=0.03), "free in practice"),
-    ("analyst", dict(requests=1, seconds=3.0, tokens_in=1400, tokens_out=200), ""),
+    ("assistant", dict(requests=1, seconds=3.0, tokens_in=1400, tokens_out=200), ""),
     ("build_compose", dict(requests=1, seconds=6.0, tokens_in=2500, tokens_out=900), ""),
     ("map_courses", dict(requests=1, seconds=30.0), ""),
     ("course_backup", dict(requests=1, seconds=180.0), ""),

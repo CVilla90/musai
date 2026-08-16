@@ -29,12 +29,22 @@ without answering "whose data?". **`professor_id=None` means NOBODY, never every
 tools still work, and they find nothing.
 """
 
-from __future__ import annotations
-
+#  🔴 **No `from __future__ import annotations` in this module, and it is load-bearing.**
+#  Adding it stringifies every annotation, including the tool signatures below — and Gemini's
+#  SDK introspects those to build the function schema. It then fails with
+#  `isinstance() arg 2 must be a type` on any tool that has a REQUIRED parameter, so
+#  `list_groups()` and `list_semesters()` kept working while `group_status`, `partial_trend`,
+#  `at_risk` and `student_status` all broke.
+#
+#  ⭐ Worth the comment because of how it presented: every tool passes when called directly
+#  from a test, and the assistant reports *"the tools are experiencing an internal server
+#  error"* — a defect that lives between the signature and the SDK, visible only through a real
+#  call. `test_the_tool_signatures_survive_schema_building` is the cheap version of that call.
 from typing import Callable, Optional
 
 from sqlmodel import Session, select
 
+from musai.assistant import help as help_docs
 from musai.db import ro_engine
 from musai.models import Course, Partial, PartialGrade, Semester, Student, Enrollment
 from musai.professors import courses_owned_by
@@ -280,6 +290,19 @@ def _at_risk(professor_id: Optional[int], group_code: str, partial: str = "",
                 "at_risk_count": len(risk), "students": risk}
 
 
+def _my_moodle_hosts(professor_id: Optional[int]) -> set[str]:
+    """Which Moodle installation(s) this professor's courses live on.
+
+    Read from the courses rather than from a setting, because it is a fact about them and not
+    about the deployment: UACH runs two Moodles three major versions apart, and a professor is
+    on whichever one their courses are on. An empty set means "not known yet" — a professor who
+    has not mapped their courses — and `help.index()` treats that as *show everything, labelled*
+    rather than *show nothing*.
+    """
+    with Session(ro_engine) as s:
+        return {c.moodle_server for c in _my_courses(s, professor_id) if c.moodle_server}
+
+
 # ── the tool set ──────────────────────────────────────────────────────────────
 
 def tools_for(professor_id: Optional[int]) -> list[Callable]:
@@ -354,4 +377,27 @@ def tools_for(professor_id: Optional[int]) -> list[Callable]:
         CURRENT semester. Use for 'who is failing / at risk in group X?'."""
         return _at_risk(professor_id, group_code, partial, threshold, semester)
 
-    return [list_semesters, list_groups, group_status, partial_trend, student_status, at_risk]
+    def list_help_topics() -> list[dict]:
+        """List the MUSAI help topics available to THIS professor, with a one-line summary of
+        each. Call this for any question about MUSAI itself rather than about grades — what the
+        app can do, what a button or a tab does, how to perform a task, what something costs,
+        what is safe. Then call read_help_topic to get the actual text before answering.
+
+        The list is already filtered to the Moodle version this professor's courses are on, so
+        every topic returned is correct for them. Do not offer a procedure from a topic that is
+        not in this list."""
+        return help_docs.index(_my_moodle_hosts(professor_id))
+
+    def read_help_topic(topic_id: str) -> dict:
+        """Read ONE help topic in full, by the `id` shown in list_help_topics.
+
+        Returns the topic's exact text. Answer from that text and nothing else: quote the button
+        and page names it uses, and cite the topic id. If it does not actually answer the
+        question, read another topic or say that none of them cover it — NEVER describe a MUSAI
+        or Moodle procedure that is not in a topic you have read. A wrong procedure sends the
+        professor to a button that does not exist, or tells them something destructive is safe.
+        "No topic covers that" is a correct and expected answer."""
+        return help_docs.read(topic_id)
+
+    return [list_semesters, list_groups, group_status, partial_trend, student_status, at_risk,
+            list_help_topics, read_help_topic]

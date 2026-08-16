@@ -37,6 +37,18 @@ client_secret_*.json
 *.md
 !README.md
 
+# 🔴 …and `docs/help/`, which is the OTHER exception and the reason it is written down here.
+# That corpus is the assistant's knowledge of the app: the running application reads it off
+# disk at question time, so excluding it ships a deployment where every help answer is "no
+# topic covers that" — a silent failure that looks like a correct refusal.
+#
+# It is safe to publish precisely because it was written to be, and that is enforced rather
+# than trusted: `tests/test_help_docs.py` refuses a topic that cites one of the private docs
+# above, names a colleague, or carries a live `90xx` course id. It is the deliberate opposite
+# of the files this section excludes — same file extension, opposite audience.
+!docs/help/
+!docs/help/*.md
+
 # ── Operational scripts and everything they harvest ──────────────────────────
 # One-shot drivers and probes written against live courses: they carry course
 # ids, professor usernames and group codes in their names alone, and they write

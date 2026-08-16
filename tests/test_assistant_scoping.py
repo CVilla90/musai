@@ -112,6 +112,39 @@ def test_there_is_no_unscoped_tool_set_to_import():
         T.tools_for()            # the owner is required, never defaulted
 
 
+def test_the_tool_signatures_survive_schema_building():
+    """🔴 Gemini reads these signatures to build its function schema. Strings are not types.
+
+    Found by a real call, 2026-08-16, and worth recording because of the shape it failed in.
+    Adding `from __future__ import annotations` to `tools.py` turned every annotation into a
+    string. Each tool still worked perfectly when called directly — every unit test passed —
+    but the SDK could not resolve the type of a REQUIRED parameter and raised
+    `isinstance() arg 2 must be a type`. `list_groups()` and `list_semesters()`, which have no
+    required parameter, kept working, so the failure looked intermittent and feature-specific.
+
+    What the professor saw: *"the tools are experiencing an internal server error"*, from an
+    assistant whose tools all pass their tests. A defect that lives between the signature and
+    the SDK is invisible to a test that calls the function.
+
+    ⚠️ **Assert on the RAW signature, not on `typing.get_type_hints`.** The first version of
+    this test used `get_type_hints` and passed cleanly with the bug re-introduced, because
+    resolving stringified annotations back into types is exactly what that function is for. The
+    SDK's own `FunctionDeclaration.from_callable` tolerates them too. What does not is the
+    argument coercion at call time — so the only faithful check is the one that looks at what
+    `inspect` reports before anyone helpfully resolves it.
+
+    Verified causally rather than reasoned: same question, same model, twice. With the future
+    import, `group_status` returned the isinstance error; without it, *"no grades have been
+    registered yet for Parcial 1 (0 out of 33 students graded)"*.
+    """
+    for fn in T.tools_for(1):
+        for name, param in inspect.signature(fn).parameters.items():
+            assert not isinstance(param.annotation, str), (
+                f"{fn.__name__}({name}) is annotated with the STRING "
+                f"{param.annotation!r}, not a type. Something added `from __future__ import "
+                f"annotations` to musai/assistant/tools.py — see the comment at its top.")
+
+
 def test_every_tool_is_bound_to_the_professor():
     """No tool exposes `professor_id` in its signature — the model cannot name someone else.
 

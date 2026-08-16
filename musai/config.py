@@ -82,19 +82,12 @@ class Settings(BaseSettings):
     # the planet). They pass the gate and are issued a session **as `admin_email`**: they are
     # aliases for the owner, not extra accounts. Signing in under a second identity would
     # create a second `Professor` row owning zero courses — a successful login into an empty
-    # cockpit, which is not recovery. See musai/security/breakglass.py for the full reasoning.
+    # cockpit, which is not recovery — `auth._session_user()` is what prevents it.
     #
     # ⚠️ This is the allow-list escape hatch `auth._gate()` deliberately did NOT have between
     # 2026-08-13 and 2026-08-16. It exists now by the owner's explicit instruction, and it is
     # narrow on purpose: exact addresses, still requiring a Google-verified email.
     admin_recovery_emails: str = ""
-
-    # The password door, for the case Google itself is what was taken away (the OAuth client
-    # lives in a Cloud project that an institutional account may have created). BOTH must be
-    # set or /auth/break-glass answers 404 — an unconfigured door should not advertise itself.
-    #   python -m musai.security.breakglass
-    break_glass_email: str = ""
-    break_glass_password_hash: str = ""
     # Empty locally (the request's own base_url is used); the public origin in prod.
     app_base_url: str = ""
 
@@ -137,21 +130,6 @@ class Settings(BaseSettings):
         """Admin = the owner's address, or an alias for it. Never self-grantable."""
         addr = (email or "").strip().lower()
         return bool(addr) and (addr == self.owner_email or self.is_recovery_address(addr))
-
-    @property
-    def break_glass_configured(self) -> bool:
-        return bool(self.break_glass_email and self.break_glass_password_hash)
-
-    @property
-    def sign_in_available(self) -> bool:
-        """Is there ANY working way in? What the default-deny gate actually asks.
-
-        Distinct from `auth_configured` (which means specifically "Google works"): a deploy
-        whose OAuth client has been revoked still has a real authentication mechanism if the
-        break-glass door is set up, and should serve the owner rather than 503 at him.
-        Either way a session cookie has to be signable, so `session_secret` is required.
-        """
-        return bool(self.session_secret) and (self.auth_configured or self.break_glass_configured)
 
     @field_validator("sega_username", mode="before")
     @classmethod

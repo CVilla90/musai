@@ -8,6 +8,7 @@ exactly the two questions whose wrong answers are silent:
 * misreading `users` hands a colleague your students.
 """
 
+import inspect
 import io
 import tarfile
 from pathlib import Path
@@ -176,3 +177,52 @@ def test_the_success_text_moodle_45_actually_prints_is_recognised():
     ok_rx = re.compile(r"(respaldo|backup).{0,40}(exitosa|exitosamente|successfully)", re.I)
     assert ok_rx.search("El proceso de respaldo ha completado exitosamente.")
     assert ok_rx.search("The backup file was successfully created.")
+
+
+# ── the success signal, and what is allowed to gate it ───────────────────────
+def test_the_forward_widget_does_not_gate_the_success_signal():
+    """🔴 The same bug, three times, because the fix kept treating the widget as the gate.
+
+    * 2026-08-13, EGB1A: `_CONTINUE_SEL` knew only Moodle 3.3's `<input type=submit>`, so
+      `has_continue` was False for all 1,183 seconds while the page said «El proceso de
+      respaldo ha completado exitosamente». The fix added the `<button>` shape.
+    * 2026-08-22, EGB1B/EGB3A/EGB7A: false again — the 4.5 pill is a third shape — and it
+      cost twenty minutes per course, four courses, on a page reading **100.00 %**.
+
+    The 2026-08-13 comment already stated the lesson exactly: *the text signal was correct on
+    both versions; the widget selector was what was version-specific, and it was the gate.*
+    Then it widened the selector and left it as the gate. ⭐ **A version-specific widget may
+    CORROBORATE a conclusion; it may not be the thing that permits one.**
+
+    Nothing pinned this, which is why two fixes went past it. This is the pin.
+    """
+    src = inspect.getsource(B._wait_for_build)
+    success = [ln for ln in src.splitlines()
+               if "restorefile.php" in ln and ln.strip().startswith("if ")]
+    assert success, "could not find the success test in _wait_for_build"
+    line = success[0]
+    assert "has_continue" not in line, (
+        "the version-specific widget is gating the success signal again — this is the bug "
+        "that cost 80 minutes on 2026-08-22 and 20 on 2026-08-13")
+    assert "ok_rx.search(body)" in line, "Moodle's own success sentence is the evidence"
+
+
+def test_the_success_sentence_matches_what_moodle_45_actually_printed():
+    """Measured off the abort-path screenshot of EGB3A, 2026-08-22 — the exact string the
+    client spent twenty minutes failing to act on."""
+    import re
+    ok_rx = re.compile(r"(respaldo|backup).{0,40}(exitosa|exitosamente|successfully)", re.I)
+    assert ok_rx.search("El proceso de respaldo ha completado exitosamente.")
+    assert ok_rx.search("The backup completed successfully.")
+    # A page still building must NOT read as success.
+    assert not ok_rx.search("El proceso de respaldo está en progreso 42.00%")
+
+
+def test_the_continue_selector_still_carries_every_shape_seen_so_far():
+    """It is corroboration now rather than a gate, but a shape once seen is never dropped:
+    3.3's input, 4.5's button, and the anchor-styled-as-button the 4.5 complete page draws."""
+    sel = B._CONTINUE_SEL
+    assert 'input[type="submit"][value*="Continuar"]' in sel
+    assert 'button:has-text("Continuar")' in sel
+    assert 'a.btn:has-text("Continuar")' in sel
+    assert "Continue" in sel, "English Moodle must match too"

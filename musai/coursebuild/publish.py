@@ -23,7 +23,7 @@ from playwright.sync_api import TimeoutError as PWTimeout, sync_playwright
 
 from musai.automation._log import describe_exception, logger as log
 from musai.automation._loop import ensure_subprocess_capable_loop
-from musai.automation.moodle_export import _find_tile, _login_campusvirtual, _open_course, _shot
+from musai.automation.moodle_export import _find_tile, _login_campusvirtual, _open_course, _shot, resolve_landed_host
 from musai.automation.credentials import resolve
 from musai.config import settings
 from musai.coursebuild.render import MARKER_PREFIX, find_marker
@@ -85,23 +85,82 @@ def enter_course(ctx, page, idc: str, *, as_user: Optional[str] = None, identity
     if tile is None:
         raise RuntimeError(f"Course tile not found for idc={idc}.")
     vpage = _open_course(ctx, page, tile, host)
-    return vpage, (host or "virtual3.uach.mx")
+    # 🔴 NOT `host or "virtual3.uach.mx"`. See moodle_export.HostUnresolved: that default
+    # would aim a write at a real server holding real courses. The landing is the fact.
+    return vpage, resolve_landed_host(vpage, hint=host, idc=idc)
+
+
+# Does the page currently rendered actually carry the EDITING CONTROLS for section n?
+#
+# 🔴 `#section-n` being present is NOT the same question, and that is the whole trap. Moodle
+# 4.5's single-section view renders `#section-n` and strips every control inside it, so a
+# container check passes on exactly the page where the work is impossible.
+_SECTION_IS_EDITABLE_JS = """
+(n) => {
+  const sec = document.querySelector('#section-' + n);
+  if (!sec) return {present: false, editable: false};
+  const editLink = sec.querySelector('a[href*="editsection.php"]');
+  const visToggle = [...document.querySelectorAll('a[href]')].some(a => {
+    const href = a.getAttribute('href') || '';
+    return /\/course\/view\.php/.test(href)
+        && new RegExp('[?&](hide|show)=' + n + '\\\\b').test(href);
+  });
+  return {present: true, editable: !!(editLink || visToggle),
+          has_edit_link: !!editLink, has_visibility_toggle: visToggle};
+}
+"""
 
 
 def editing_on(vpage, host: str, idc: str, section: Optional[int] = None) -> None:
     """Switch editing on by URL — language-proof and idempotent.
 
-    `section` matters on this Moodle: 1-LED-A uses the **onetopic** format, which renders one
-    tab at a time, so per-section controls (the *Editar sección* link) only exist in the DOM
-    for the section actually being displayed.
+    🔴 **`&section=N` is a fallback now, not the default, and that inversion is measured.**
+
+    It was added for **onetopic on Moodle 3.3**, which renders one tab at a time: there, the
+    per-section controls only exist in the DOM for the section being displayed, so naming the
+    section is the only way to reach them.
+
+    On **Moodle 4.5 under `topics` the same parameter does the opposite.** Measured 2026-08-22
+    on aulas1 course 6253 (`scratchpad/probe_45_section_view.py`), same account, same moment:
+
+        /course/view.php?id=6253&sesskey=…&edit=on              5 sections · 9 editsection
+                                                                links · hide=N present
+        /course/view.php?id=6253&sesskey=…&edit=on&section=1    1 section  · 0 editsection
+                                                                links · 0 hide/show links
+
+    `?section=N` renders a **single-section view with every editing control stripped**, because
+    you are "inside" the section rather than looking at the course. It cost a dry run five
+    failures — the whole banner write and all four section hides — each reported as a refusal
+    naming Moodle (*"no Editar sección link"*, *"offers neither a hide nor a show link"*) while
+    describing our own navigation.
+
+    ⭐ **And `#section-N` is present in BOTH views**, so the obvious check cannot tell them
+    apart. The question is not *is the section on this page* but *are its controls on this
+    page* — so that is what this asks, and only if the answer is no does it fall back to the
+    per-section URL.
     """
     sesskey = vpage.evaluate("() => (window.M && M.cfg && M.cfg.sesskey) || null")
     if not sesskey:
         raise RuntimeError("Could not read M.cfg.sesskey from the course page.")
-    url = f"https://{host}/course/view.php?id={idc}&sesskey={sesskey}&edit=on"
-    if section is not None:
-        url += f"&section={section}"
-    vpage.goto(url, wait_until="domcontentloaded", timeout=60000)
+    base = f"https://{host}/course/view.php?id={idc}&sesskey={sesskey}&edit=on"
+
+    vpage.goto(base, wait_until="domcontentloaded", timeout=60000)
+    vpage.wait_for_load_state("networkidle", timeout=25000)
+    if section is None:
+        return
+
+    state = vpage.evaluate(_SECTION_IS_EDITABLE_JS, section)
+    if state.get("editable"):
+        log.info(f"§{section} is editable on the full course page — staying there "
+                 f"(edit link: {state.get('has_edit_link')}, "
+                 f"visibility toggle: {state.get('has_visibility_toggle')})")
+        return
+
+    # Not reachable from the whole-course page: this is the onetopic shape, where only the
+    # displayed tab is in the DOM. NOW the per-section URL is the right move.
+    log.info(f"§{section} carries no controls on the full page "
+             f"(present={state.get('present')}) — opening the per-section view")
+    vpage.goto(f"{base}&section={section}", wait_until="domcontentloaded", timeout=60000)
     vpage.wait_for_load_state("networkidle", timeout=25000)
 
 

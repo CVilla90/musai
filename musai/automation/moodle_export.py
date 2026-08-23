@@ -25,6 +25,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from urllib.parse import urlparse
+
 from playwright.sync_api import sync_playwright, Page, BrowserContext, TimeoutError as PWTimeout
 
 from musai.config import settings
@@ -155,6 +157,75 @@ def _find_tile(page: Page, idc: str, materia: str | None, grupo: str | None):
             host = f"{server}.uach.mx" if server else None
             return t, host
     return None, None
+
+
+class HostUnresolved(RuntimeError):
+    """We could not read which Moodle host the browser actually landed on.
+
+    🔴 This exists because the thing it replaces was a *default*. Every entry point used to
+    end its tile lookup with ``host = host or "virtual3.uach.mx"`` — a guess that was correct
+    for every course this project had ever touched, and is catastrophically wrong for the
+    first one it is not.
+
+    The concrete case, measured 2026-08-22 on a delegated colleague's own Tablero: nine
+    tiles, **four on VIRTUAL3** (9045 · 9069 · 9011 · 9009 — three of them courses MUSAI
+    itself built content into) and **five on AULAS1** (the Enfermería courses,
+    6252 · 6253 · 6295 · 6264 · 6265). A single tile whose ``data-server`` failed to parse
+    would have sent "hide all 226 activities in the Enfermería course" at one of their
+    live English courses instead, under their own name. The collision target is not
+    hypothetical; it is four rows up the same page.
+
+    An unreadable host is UNKNOWN, and unknown must stop rather than pick.
+    """
+
+
+def resolve_landed_host(vpage: Page, *, hint: str | None = None,
+                        idc: str | None = None) -> str:
+    """Return the host the browser is ACTUALLY on. Never guesses, never defaults.
+
+    ``hint`` is the tile's ``data-server`` — a claim made by the portal *before* navigating.
+    The authority is where we ended up, read two independent ways:
+
+    * ``vpage.url``          — the browser's own address bar.
+    * ``M.cfg.wwwroot``      — what Moodle believes it is serving.
+
+    If both are readable and disagree, that is a redirect we do not understand, and it
+    refuses. If ``hint`` disagrees with the landing, the landing wins and the mismatch is
+    logged loudly — the portal said one thing and the SSO did another, which is worth seeing.
+    """
+    url_host = ""
+    try:
+        url_host = (urlparse(vpage.url).hostname or "").strip().lower()
+    except Exception:
+        pass
+
+    wwwroot_host = ""
+    try:
+        root = vpage.evaluate("() => (window.M && M.cfg && M.cfg.wwwroot) || ''")
+        wwwroot_host = (urlparse(root).hostname or "").strip().lower()
+    except Exception:
+        pass
+
+    where = f" for idc={idc}" if idc else ""
+    if url_host and wwwroot_host and url_host != wwwroot_host:
+        raise HostUnresolved(
+            f"Landed host is ambiguous{where}: the address bar says {url_host!r} but "
+            f"M.cfg.wwwroot says {wwwroot_host!r}. Refusing rather than picking one — a "
+            f"write aimed at the wrong Moodle is not recoverable by re-running.")
+
+    host = url_host or wwwroot_host
+    if not host:
+        raise HostUnresolved(
+            f"Could not read the Moodle host from the opened page{where} (url and "
+            f"M.cfg.wwwroot both unreadable). Refusing: this used to default to "
+            f"virtual3.uach.mx, which is a real server holding real courses.")
+
+    hint_host = (hint or "").strip().lower()
+    if hint_host and hint_host != host:
+        log.warning(
+            f"Tile claimed host {hint_host!r} but the browser landed on {host!r}"
+            f"{where}. Trusting the landing — the tile is a claim, the URL is a fact.")
+    return host
 
 
 def _open_course(context: BrowserContext, page: Page, tile, host_hint: str | None) -> Page:
@@ -339,11 +410,8 @@ def export_gradebook_ods(
                 raise RuntimeError(
                     f"Course tile not found for idc={idc} ({grupo} {materia}). Screenshot saved."
                 )
-            if not host:
-                host = "virtual3.uach.mx"
-                log.warning(f"data-server missing on tile; defaulting host to {host}")
-
             vpage = _open_course(context, page, tile, host)
+            host = resolve_landed_host(vpage, hint=host, idc=idc)
             step("Course opened — opening the gradebook export form")
             result = _download_export(vpage, host, idc, out_path)
             step(f"Export downloaded → {result.name}")

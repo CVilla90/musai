@@ -132,40 +132,61 @@ _MODEDIT_VISIBLE_JS = """
 VISIBLE_SHOWN = "1"
 VISIBLE_HIDDEN = "0"
 
-# A SECTION's hide/show link, told apart from an activity's by two independent things at once:
-# the href names the section (`section=<n>`) *and* the toggled id equals that same section
-# number. An activity's link carries a seven-digit cmid there, so the pair can only agree for a
-# real section link. Measured 2026-08-11 on 9048 §10:
-#   https://virtual3.uach.mx/course/view.php?id=9048&section=10&sesskey=…&show=10
+# A SECTION's hide/show link, told apart from an activity's. The discriminator is the
+# **path**, because the query string is not the same on both Moodles we drive:
+#
+#   Moodle 3.3 (virtual3, measured 2026-08-11 on 9048 §10)
+#       /course/view.php?id=9048&section=10&sesskey=…&show=10      ← carries section=N
+#   Moodle 4.5 (aulas1,   measured 2026-08-22 on 6253 §1)
+#       /course/view.php?id=6253&sesskey=…&hide=1                  ← NO section=N at all
+#   an ACTIVITY, both versions
+#       /course/mod.php?sesskey=…&hide=<cmid>
+#
+# 🔴 The previous version REQUIRED `section=<n>` in the href. That was true on 3.3 and is
+# simply absent on 4.5, so every section hide/show on aulas1 refused with "no link found" —
+# a refusal that names Moodle while describing our own selector. Same disease as
+# `backup._CONTINUE_SEL`, which spent 1,183 seconds reporting failure over a success because
+# it only knew 3.3's widget. **An instrument shaped like the old system answers confidently
+# and backwards about the new one.**
+#
+# So: `course/view.php` means section, `course/mod.php` means activity, and `section=<n>` is
+# accepted as corroboration where it exists rather than demanded where it does not.
+_SECTION_LINK_JS = """
+  const isSectionLink = (href) => /\/course\/view\.php/.test(href)
+                              && !/\/course\/mod\.php/.test(href);
+"""
+
 _FIND_SECTION_VISIBILITY_LINK_JS = """
 ([n, action]) => {
+  %s
   const mods = new Set([...document.querySelectorAll('[id^="module-"]')]
       .map(m => m.id.replace('module-', '')));
   for (const a of document.querySelectorAll('a[href]')) {
     const href = a.getAttribute('href') || '';
+    if (!isSectionLink(href)) continue;        // an activity's control lives on mod.php
     const m = href.match(new RegExp('[?&]' + action + '=(\\\\d+)\\\\b'));
     if (!m || m[1] !== String(n)) continue;
-    if (!new RegExp('[?&]section=' + n + '\\\\b').test(href)) continue;
     if (mods.has(m[1])) continue;              // a cmid that happens to look like a section
     return a.href;
   }
   return null;
 }
-"""
+""" % _SECTION_LINK_JS
 
 # 🔴 Which link Moodle renders IS the state, and it is the only state this Moodle exposes:
 # there is no `visible` field on the section form to read back from (unlike an activity, whose
-# `modedit.php` is authoritative). A hidden section offers *Mostrar tópico/tema*; a shown one
-# offers *Ocultar*. Reading which of the two exists is therefore an authoritative read of
-# Moodle's own opinion, not an inference from styling — the mistake `_ACTIVITY_STATE_JS`
-# documents.
+# `modedit.php` is authoritative — confirmed again on 4.5: `editsection.php` carries 35
+# controls and not one of them is `visible`). A hidden section offers *Mostrar*; a shown one
+# offers *Ocultar*. Reading which of the two exists is an authoritative read of Moodle's own
+# opinion, not an inference from styling — the mistake `_ACTIVITY_STATE_JS` documents.
 _READ_SECTION_VISIBLE_JS = """
 (n) => {
+  %s
   const has = (action) => {
     for (const a of document.querySelectorAll('a[href]')) {
       const href = a.getAttribute('href') || '';
-      if (new RegExp('[?&]' + action + '=' + n + '\\\\b').test(href) &&
-          new RegExp('[?&]section=' + n + '\\\\b').test(href)) return true;
+      if (!isSectionLink(href)) continue;
+      if (new RegExp('[?&]' + action + '=' + n + '\\\\b').test(href)) return true;
     }
     return false;
   };
@@ -174,7 +195,7 @@ _READ_SECTION_VISIBLE_JS = """
   if (canShow && !canHide) return '0';
   return null;                                  // ambiguous — refuse rather than guess
 }
-"""
+""" % _SECTION_LINK_JS
 
 
 class StructureRefused(RuntimeError):

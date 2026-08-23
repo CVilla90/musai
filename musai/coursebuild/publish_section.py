@@ -62,16 +62,38 @@ _READ_SUMMARY_JS = """
 }
 """
 
+# 🔴 Three editors, because the two Moodles this project drives ship different ones and the
+# difference is invisible until a save quietly does nothing:
+#
+#   virtual3  Moodle 3.3  →  TinyMCE   (measured 2026-08-07)
+#   aulas1    Moodle 4.5  →  **Atto**  (measured 2026-08-22 — ENFERMERIA_PILOT §5 had
+#                                       predicted TinyMCE 6, and predicting is not measuring)
+#
+# The Atto branch is the one worth explaining. Atto's live content lives in a contenteditable
+# `<div>`, and Moodle copies THAT into the textarea when the form submits. So writing only the
+# textarea — which is what this function used to do everywhere TinyMCE was absent — races a
+# sync that can overwrite it with the editor's own (empty) content. The 6252 hero went in that
+# way and survived, which made it look correct; one observation of a race coming out the right
+# way is not a measurement of the race. Both are written now, editable first.
 _SET_SUMMARY_JS = """
 (html) => {
     try {
+        const ta = document.querySelector('textarea[name="summary_editor[text]"]');
         if (window.tinyMCE && tinyMCE.get('id_summary_editor')) {
             tinyMCE.get('id_summary_editor').setContent(html);
-            const ta = document.querySelector('textarea[name="summary_editor[text]"]');
             if (ta) ta.value = html;      // keep the POST body in sync
             return 'tinymce';
         }
-        const ta = document.querySelector('textarea[name="summary_editor[text]"]');
+        // Atto: the contenteditable IS the content; the textarea is downstream of it.
+        const atto = document.querySelector('#id_summary_editoreditable')
+                  || document.querySelector('[id$="_summary_editoreditable"]')
+                  || document.querySelector('.editor_atto_content[contenteditable="true"]');
+        if (atto) {
+            atto.innerHTML = html;
+            atto.dispatchEvent(new Event('input', {bubbles: true}));
+            if (ta) ta.value = html;
+            return 'atto';
+        }
         if (ta) { ta.value = html; return 'textarea'; }
         return 'no-editor';
     } catch (e) { return 'err:' + e.message; }

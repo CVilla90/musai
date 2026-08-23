@@ -39,7 +39,7 @@ from musai.automation._log import describe_exception, logger as log
 from musai.automation._loop import ensure_subprocess_capable_loop
 from musai.automation.backup import inspect_mbz
 from musai.automation.credentials import CredentialsMissing, resolve as resolve_identity
-from musai.automation.moodle_export import _find_tile, _login_campusvirtual, _open_course, _shot
+from musai.automation.moodle_export import _find_tile, _login_campusvirtual, _open_course, _shot, resolve_landed_host
 from musai.config import settings
 
 SHOT_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
@@ -300,7 +300,7 @@ def restore_course(
             if tile is None:
                 raise RestoreAborted(f"Course tile not found for idc={idc}.")
             vpage = _open_course(ctx, page, tile, host)
-            host = host or "virtual3.uach.mx"
+            host = resolve_landed_host(vpage, hint=host, idc=idc)
             step("Course opened")
 
             # ── Targeting — before the wizard, because the wizard is where wiping starts ─
@@ -649,7 +649,7 @@ def check_target(*, idc: str, backup_path: str | Path | None = None,
                 raise RestoreAborted(
                     f"Course tile not found for idc={idc} on {identity.username}'s dashboard.")
             vpage = _open_course(ctx, page, tile, host)
-            host = host or "virtual3.uach.mx"
+            host = resolve_landed_host(vpage, hint=host, idc=idc)
 
             name = _read_course_name(vpage, host, idc)
             out["target_name"] = name
@@ -693,7 +693,7 @@ def verify_course(idc: str, *, headless: bool = True) -> dict:
             if tile is None:
                 raise RestoreAborted(f"Course tile not found for idc={idc}.")
             vpage = _open_course(ctx, page, tile, host)
-            host = host or "virtual3.uach.mx"
+            host = resolve_landed_host(vpage, hint=host, idc=idc)
             total, per_section = _count_activities(vpage, host, idc)
             return {"idc": idc, "modules": total, "sections": per_section}
         finally:

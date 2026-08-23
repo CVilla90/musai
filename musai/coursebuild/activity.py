@@ -81,6 +81,28 @@ ALLOWED_FIELDS = {
         "customtitles",
         "visible",
     }),
+    #: A `quiz` shell, and deliberately nothing more. Measured on the live blank form
+    #: 2026-08-22 (`scratchpad/probe_45_writepath.py` on aulas1 6253 — Moodle **4.5**, the
+    #: first non-3.3 form this module has been pointed at): **229 controls**, of which these
+    #: two are all MUSAI has any business setting.
+    #:
+    #: 🔴 Everything else is left at Moodle's default ON PURPOSE, and the omissions are the
+    #: design:
+    #:   * `grade` is a hidden input here — a quiz's maximum comes from the sum of its
+    #:     question marks and Moodle recomputes it. Writing it would put a number in the
+    #:     gradebook that the questions then contradict.
+    #:   * `attempts`, `timelimit`, `grademethod`, `shuffleanswers` are exam policy. They
+    #:     belong to the professor who writes the questions, not to the tool that makes the
+    #:     empty shell.
+    #:   * `timeopen`/`timeclose` are dates — FORBIDDEN_FIELDS, same as every other module.
+    #:
+    #: The whole point of this entry is a container the professor opens and fills. A quiz that
+    #: silently carries our opinion about how many attempts her exam allows is worse than no
+    #: quiz at all.
+    "quiz": frozenset({
+        "name",
+        "visible",
+    }),
 }
 
 #: Field names that exist on the forms and are *forbidden* here, with the reason. Kept explicit
@@ -211,7 +233,24 @@ def _book_fields(spec: ActivitySpec) -> dict:
     }
 
 
-_BUILDERS = {"assign": _assign_fields, "forum": _forum_fields, "book": _book_fields}
+def _quiz_fields(spec: ActivitySpec) -> dict:
+    """No fields beyond name/visible — see ALLOWED_FIELDS["quiz"].
+
+    It exists as a function anyway so `_BUILDERS` stays the single place that says which
+    module types are creatable, and so the next person to add a quiz option has an obvious
+    place to put it and an obvious comment telling them why it was left out.
+    """
+    if spec.grade_point != ActivitySpec.grade_point:
+        raise ActivityRefused(
+            "grade_point is meaningless for a quiz: the maximum is the sum of the question "
+            "marks and Moodle recomputes it when questions are added. Setting it here writes "
+            "a gradebook number the questions will contradict."
+        )
+    return {}
+
+
+_BUILDERS = {"assign": _assign_fields, "forum": _forum_fields, "book": _book_fields,
+             "quiz": _quiz_fields}
 
 
 def plan_fields(spec: ActivitySpec) -> dict:
@@ -225,9 +264,16 @@ def plan_fields(spec: ActivitySpec) -> dict:
         raise ActivityRefused("An activity needs a name; Moodle rejects a blank one.")
     if spec.modname not in _BUILDERS:
         raise ActivityRefused(
-            f"Only {sorted(_BUILDERS)} are supported, not {spec.modname!r}. Quizzes carry far "
-            "more options and should reuse moodle_suite/generators' Moodle-XML instead of "
-            "driving this form."
+            f"Only {sorted(_BUILDERS)} are supported, not {spec.modname!r}. A quiz here is "
+            "an EMPTY SHELL (name + visibility only); questions still belong to Moodle-XML "
+            "import, not to this form."
+        )
+    if spec.modname == "quiz" and spec.cmid:
+        raise ActivityRefused(
+            "A quiz may be CREATED here but never EDITED here. This writer always writes "
+            "`intro_html`, so pointing it at an existing quiz replaces the professor's own "
+            "description — and a quiz's description is where an exam's instructions live. "
+            "Rename via musai.coursebuild.rename; change the questions in Moodle."
         )
     if not spec.marker:
         raise ActivityRefused(
@@ -382,6 +428,17 @@ def create_activity(
                     existing = vpage.evaluate(_FIND_BY_NAME_JS,
                                               [spec.section, spec.name.strip()])
             if existing and existing.get("cmid"):
+                # 🔴 For every other module type "found it already" means a safe, idempotent
+                # re-run. For a quiz it means the professor's exam instructions are about to
+                # be overwritten by our placeholder text, silently, and reported as success.
+                # Exam shells exist precisely so the professor can write into them.
+                if spec.modname == "quiz":
+                    raise ActivityRefused(
+                        f"{spec.name!r} already exists in section {spec.section} "
+                        f"(cmid={existing['cmid']}). Refusing: re-running would replace its "
+                        f"description, which is where an exam's instructions live. Nothing "
+                        f"was written."
+                    )
                 out["mode"], out["cmid"] = "update", existing["cmid"]
                 url = f"https://{host}/course/modedit.php?update={existing['cmid']}&return=0&sr=0"
                 step(f"Found it already (cmid={existing['cmid']}) — editing in place")

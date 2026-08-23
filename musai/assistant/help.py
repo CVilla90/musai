@@ -2,7 +2,7 @@
 
 A professor's first question is never about a mean grade. It is *"can this thing do X?"*, and
 until now the assistant could only answer questions about the gradebook — so the one thing a
-colleague needs in order to start using MUSAI without Carlos in the room was the one thing it
+colleague needs in order to start using MUSAI without the owner in the room was the one thing it
 could not tell them.
 
 **Shape: give the model an index, let it pull the page.** `index()` + `read()` over a few dozen

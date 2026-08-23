@@ -48,7 +48,7 @@ from playwright.sync_api import TimeoutError as PWTimeout, sync_playwright
 from musai.automation._log import describe_exception, logger as log
 from musai.automation._loop import ensure_subprocess_capable_loop
 from musai.automation.credentials import CredentialsMissing, resolve
-from musai.automation.moodle_export import _find_tile, _login_campusvirtual, _open_course, _shot
+from musai.automation.moodle_export import _find_tile, _login_campusvirtual, _open_course, _shot, resolve_landed_host
 from musai.config import settings
 
 SHOT_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
@@ -200,10 +200,19 @@ def _pick_new_backup(before: list[str], after: list[str], idc: str) -> str:
 # ⭐ Same disease as every "cried wolf" entry in HANDOFF: **an instrument shaped like the old
 # system answers confidently and backwards about the new one.** The text signal was correct on
 # both versions; the widget selector was what was version-specific, and it was the gate.
+#
+# 🔴 2026-08-22, THE THIRD TIME: widened again for an ANCHOR styled as a button. The 4.5
+# complete page for Colleague B's EGB3A showed «El proceso de respaldo ha completado exitosamente»
+# at 100.00 % with a purple `Continuar` pill, and `has_continue` was STILL false — the input
+# shapes and the `<button>` shape were both already listed, so the widget is a third thing.
+# ⚠️ This list is now a HYPOTHESIS about that pill, taken from a screenshot rather than from
+# the DOM, and it is deliberately no longer load-bearing — see `_wait_for_build`.
 _CONTINUE_SEL = ('input[type="submit"][value*="Continuar"], '
                  'input[type="submit"][value*="Continue"], '
                  'button:has-text("Continuar"), '
-                 'button:has-text("Continue")')
+                 'button:has-text("Continue"), '
+                 'a.btn:has-text("Continuar"), '
+                 'a.btn:has-text("Continue")')
 
 
 def _wait_for_build(page, step) -> None:
@@ -235,10 +244,26 @@ def _wait_for_build(page, step) -> None:
         except Exception:
             pass  # navigating — nothing readable yet, and that is progress, not failure
 
-        if has_continue and (ok_rx.search(body) or "restorefile.php" in url):
-            step("Backup file created")
+        # 🔴 THE WIDGET IS NOT THE GATE ANY MORE, and that is the whole point.
+        #
+        # This line used to read `if has_continue and (ok_rx.search(body) or …)`. The comment
+        # above `_CONTINUE_SEL` has said since 2026-08-13 that *"the text signal was correct on
+        # both versions; the widget selector was what was version-specific, and it was the
+        # gate"* — and then the fix widened the selector and LEFT IT AS THE GATE. On 2026-08-22
+        # it cost twenty minutes per course, four times over, on a page reading 100.00 %
+        # «completado exitosamente» the whole while.
+        #
+        # ⭐ A version-specific widget may CORROBORATE a conclusion. It may not be the thing
+        # that permits one. Moodle's own sentence, and the restorefile URL, are the evidence;
+        # `has_continue` is now only recorded in the step message so a human can see which
+        # shape this Moodle drew.
+        if ok_rx.search(body) or "restorefile.php" in url:
+            widget = "forward control found" if has_continue else (
+                "forward control NOT matched — _CONTINUE_SEL is stale for this Moodle, but "
+                "the success sentence is unambiguous")
+            step(f"Backup file created ({widget})")
             return
-        if has_continue and err_rx.search(body[:400]):
+        if err_rx.search(body[:400]) and (has_continue or "restorefile.php" not in url):
             _shot(page, "backup_build_error")
             raise BackupAborted(
                 "Moodle's backup step finished on an error page. Screenshot saved; nothing "
@@ -342,7 +367,7 @@ def backup_course(
                     f"campusvirtual portal only lists courses YOU are enrolled in — a colleague's "
                     f"course cannot be reached from here.")
             vpage = _open_course(ctx, page, tile, host)
-            host = host or "virtual3.uach.mx"
+            host = resolve_landed_host(vpage, hint=host, idc=idc)
             step("Course opened")
 
             # `restorefile.php` wants a CONTEXT id, not a course id (restore.py §the hard way).

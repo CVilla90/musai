@@ -222,7 +222,17 @@ def test_a_dry_run_never_reaches_the_save():
 
 
 def test_the_rename_did_not_get_bolted_onto_create_activity():
-    """`create_activity` refuses quizzes on purpose — it requires `intro_html` and always
-    writes it, so a rename routed through it would replace the professor's description."""
+    """`create_activity` requires `intro_html` and always writes it, so a rename routed
+    through it would replace the professor's description.
+
+    ⚠️ This used to be enforced by `"quiz" not in activity._BUILDERS` — quizzes were simply
+    not creatable. Since 2026-08-22 they are (Moodle 4.5 needed empty exam shells), so the
+    invariant is now enforced where it actually lives: `create_activity` refuses to reach the
+    UPDATE branch for a quiz at all, by either road. Renaming still belongs to this module.
+    """
     assert not hasattr(activity, "rename_activity")
-    assert "quiz" not in activity._BUILDERS
+    src = inspect.getsource(activity)
+    assert "never EDITED here" in src, "the quiz create-only rail is gone"
+    assert src.count('spec.modname == "quiz"') >= 2, (
+        "the rail must cover BOTH roads into the update branch — an explicit cmid, and the "
+        "name lookup that makes a re-run idempotent for every other module type")

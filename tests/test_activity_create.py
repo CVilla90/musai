@@ -167,9 +167,25 @@ def test_description_html_must_pass_the_same_lint_as_every_other_block():
         plan_fields(spec(intro_html=f'{MARK}<img src="x" onerror="alert(1)">'))
 
 
-def test_only_assign_is_supported_and_quizzes_say_why_not():
+def test_an_unsupported_module_type_says_what_IS_supported():
     with pytest.raises(ActivityRefused, match="Moodle-XML"):
-        plan_fields(spec(modname="quiz"))
+        plan_fields(spec(modname="glossary"))
+
+
+def test_a_quiz_shell_is_creatable_but_never_editable_here():
+    """⚠️ Quizzes used to be refused outright. They are creatable since 2026-08-22 (Moodle 4.5,
+    Enfermería) — as an EMPTY SHELL, name and visibility only.
+
+    🔴 The refusal that replaced the blanket one is narrower and more important: this writer
+    always writes `intro_html`, and a quiz's description is where an exam's instructions live.
+    So creating is allowed and editing is not, on both roads into the update branch — an
+    explicit `cmid`, and the name lookup that makes a re-run idempotent for every other type.
+    """
+    planned = plan_fields(spec(modname="quiz", name="Examen Parcial 1", visible=True))
+    assert planned == {"name": "Examen Parcial 1", "visible": "1"}, (
+        "a quiz shell writes name and visibility and nothing else")
+    with pytest.raises(ActivityRefused, match="never EDITED"):
+        plan_fields(spec(modname="quiz", name="Examen Parcial 1", cmid="50953"))
 
 
 def test_an_unknown_submission_type_is_refused():

@@ -168,16 +168,25 @@ def test_a_section_cannot_be_revealed_without_naming_it():
         structure.set_section_visibility(idc="9048", section=10, visible=True, expect_name="")
 
 
-def test_the_section_link_finder_requires_the_number_to_agree_with_itself():
+def test_the_section_link_finder_tells_a_section_from_an_activity():
     """🔴 An activity's hide/show link and a section's live on the same page and differ only
-    in what the id means. The finder demands `section=<n>` AND `hide|show=<n>` in the same
-    href, and rejects an id that matches a module on the page — three independent checks,
-    because picking an activity's link here would hide a student's assignment instead of a
-    tab, and report success."""
+    in what the id means. Picking the activity's here would hide a student's assignment
+    instead of a tab, and report success.
+
+    ⚠️ This test used to assert the finder demanded `'[?&]section=' + n`. It did — on Moodle
+    3.3, where the href carries it. Moodle 4.5 renders
+    `/course/view.php?id=6253&sesskey=…&hide=1` with no `section=` at all, so that demand
+    refused every section hide on aulas1 while this test went on passing: **a
+    source-substring check cannot tell a requirement from a defect.** The discriminator is
+    now the path (`course/view.php` = section, `course/mod.php` = activity), which is true on
+    both versions, and the real decision is exercised against both measured DOM shapes in
+    `tests/test_section_visibility_shapes.py`."""
     js = structure._FIND_SECTION_VISIBILITY_LINK_JS
     assert "m[1] !== String(n)" in js
-    assert "'[?&]section=' + n" in js
+    assert "isSectionLink(href)" in js
     assert "mods.has(m[1])" in js
+    assert "'[?&]section=' + n" not in js, (
+        "the 3.3-only requirement is back; it refuses every section hide on Moodle 4.5")
 
 
 def test_section_visibility_is_read_from_which_link_moodle_offers():

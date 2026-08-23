@@ -16,7 +16,7 @@ central rail here is the mirror image of `restore.py`'s:
     course_import.py refuses when the target has CONTENT.
 
 ⚠️ **`import.php` is only offered on courses this account can EDIT — both ends.**
-`COURSE_EDITING §7b` measured that with a control: from Carlos's account, four colleagues'
+`COURSE_EDITING §7b` measured that with a control: from the owner's account, four colleagues'
 courses report `import.php` absent while his own report it present. So this module serves the
 case where one professor holds several groups of the same subject (the common one for a new
 MUSAI user) and **cannot** serve propagation across professors — that stays `backup.py` +

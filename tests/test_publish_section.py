@@ -20,6 +20,7 @@ The browser is faked (see `FakePage`) rather than mocked away entirely, so the f
 back up, decide, fill, save, verify — is actually executed.
 """
 
+import inspect
 from datetime import date
 
 import pytest
@@ -325,3 +326,37 @@ def test_the_jobs_default_target_is_the_label(course):
     job_id = jobs.create_job(course.id, NEW_HTML, 0, True)
     assert jobs.get_job(job_id)["params"]["target"] == jobs.LABEL
     assert jobs.get_job(job_id)["params"]["overwrite_foreign"] is False
+
+
+# ── the editor, which is not the same one on both Moodles ────────────────────
+def test_the_summary_setter_handles_atto_not_only_tinymce():
+    """🔴 virtual3 (Moodle 3.3) ships TinyMCE; aulas1 (Moodle 4.5) ships **Atto**. Measured
+    2026-08-22 — `ENFERMERIA_PILOT.md` §5 had predicted TinyMCE 6, and a prediction about a
+    remote system is a hypothesis until something reads it.
+
+    Atto's live content is a contenteditable div and Moodle copies THAT into the textarea on
+    submit. Writing only the textarea races that sync, and a lost race looks exactly like a
+    save that succeeded and changed nothing — the failure mode this whole module exists for.
+    """
+    js = publish_section._SET_SUMMARY_JS
+    assert "summary_editoreditable" in js, "no Atto branch — a 4.5 save may write nothing"
+    assert "editor_atto_content" in js, "no fallback selector for Atto's editable"
+    assert js.index("atto.innerHTML") < js.index("return 'atto'")
+    # The textarea write must remain, as the POST body and as the last-resort path.
+    assert 'textarea[name="summary_editor[text]"]' in js
+    assert "return 'textarea'" in js
+
+
+def test_the_editor_branches_are_ordered_most_authoritative_first():
+    """TinyMCE owns its content once initialised, so it is asked first; Atto second; the raw
+    textarea only when neither editor is on the page. Reversing this writes the textarea on a
+    page whose editor will immediately overwrite it."""
+    js = publish_section._SET_SUMMARY_JS
+    assert js.index("return 'tinymce'") < js.index("return 'atto'") < js.index("return 'textarea'")
+
+
+def test_the_setter_reports_which_editor_it_used():
+    """The step message names the path taken, so a log says `atto` or `textarea` rather than
+    'filled' — the difference between them is the difference between a save and a no-op."""
+    src = inspect.getsource(publish_section.publish_section_summary)
+    assert "Summary filled via {how}" in src

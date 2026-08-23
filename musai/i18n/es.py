@@ -11,7 +11,7 @@ A translation that softens one of these is a safety regression with a green tick
 1. **"MUSAI can read these passwords."** The Settings page exists to say the uncomfortable
    thing out loud. *"MUSAI puede leer estas contraseñas"* — not *"tiene acceso a"*, which is
    the sentence someone writes when they want it to sound better than it is.
-2. **The dry-run badge.** *Simulacro* is the word Carlos's own dry-run buttons already use in
+2. **The dry-run badge.** *Simulacro* is the word the owner's own dry-run buttons already use in
    the course pages, so the badge and the button agree. **LIVE** is *EN VIVO · escrituras
    activas* — never *activo*, which reads as "working" rather than "armed".
 3. **Every refusal.** A refusal must still name the thing refused and must not apologise its

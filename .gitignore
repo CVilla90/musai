@@ -27,6 +27,7 @@
 !.env.example
 # Google OAuth client download. The app reads .env, never this file.
 client_secret_*.json
+private/
 
 # ── Working notes ────────────────────────────────────────────────────────────
 # The session log, the per-course worksheets, the runbooks and the product
@@ -90,6 +91,7 @@ __pycache__/
 screenshots/
 *.png
 downloads/
+.musai-cache/
 *.csv
 *.ods
 *.xlsx

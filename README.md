@@ -51,6 +51,19 @@ non-owner, so a route added next month is covered the day it is written.
 
 ## Layout
 
+The public repository contains the reusable engine, tests, migrations and runtime help in
+`docs/help/`. Local setup guides, operational notes, product plans, handoffs and historical
+worksheets are kept separately under `docs/setup/`, `docs/operations/`, `docs/product/`,
+`docs/handoffs/` and `docs/archive/`; these private documents remain excluded from git.
+
+Keep credentials and private fixtures under ignored `private/`, and legacy database snapshots
+under `backups/legacy/`. Archive completed operational records under `scratchpad/archive/`
+and older browser evidence under `screenshots/archive/`, retaining a private path index when
+files move. Preserve active grade/recovery manifests and their referenced paths. Regenerable
+Python/pytest caches and verified byte-identical copies can be removed; the small vision cache
+should be retained to avoid repeat AI requests. Never treat untracked source or migrations as
+disposable cleanup.
+
 | path | what lives there |
 |---|---|
 | `musai/web/` | FastAPI cockpit — routers, the auth gate, ownership dependencies, templates |
